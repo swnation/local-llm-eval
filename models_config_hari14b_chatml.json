@@ -1,0 +1,13 @@
+{
+  "_comment": "§5.4 hari-q3-14b-i1 ChatML variant. 8b에서 효과 확인되어 14b도 같은 패턴 적용.",
+  "_eval_set": "prompts/test_suite_v0.2.json",
+  "_compare_with": "results/hari-14b-i1_20260516_050318.json (default Modelfile)",
+  "models": [
+    {
+      "label": "hari-14b-i1-chatml",
+      "provider": "ollama",
+      "ollama_name": "hari-q3-14b-i1-chatml:latest",
+      "inference_options": {}
+    }
+  ]
+}

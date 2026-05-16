@@ -1,0 +1,13 @@
+{
+  "_comment": "hari-q3-8b-i1 with explicit ChatML template (fallback). Default 모델은 입력 prompt echo + max_tokens 도달 패턴 보임. ChatML 적용 시 reasoning trace 정상 생성.",
+  "_eval_set": "prompts/test_suite_v0.2.json",
+  "_compare_with": "results/hari-8b-i1_20260516_050107.json (default Modelfile)",
+  "models": [
+    {
+      "label": "hari-8b-i1-chatml",
+      "provider": "ollama",
+      "ollama_name": "hari-q3-8b-i1-chatml:latest",
+      "inference_options": {}
+    }
+  ]
+}

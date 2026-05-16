@@ -1,0 +1,45 @@
+{
+  "model_label": "gemma4-latest",
+  "provider": "ollama",
+  "base_url": "http://localhost:11434/v1",
+  "model_id": "gemma4:latest",
+  "timestamp": "2026-05-16T04:53:20.983675",
+  "prompts_version": "0.2",
+  "load_options": {},
+  "inference_options": {},
+  "tests": [
+    {
+      "id": "D_01",
+      "category": "D_json_phi",
+      "title": "Multiple findings -> JSON array summary",
+      "expected": "Top-level keys: case_id, summary, items. items length 3. 각 item: finding_id, rule_id, severity, review_reason, recommended_check.",
+      "success": true,
+      "elapsed_sec": 18.9,
+      "completion_tokens": 1644,
+      "tok_per_sec": 87.1,
+      "response": "```json\n{\n  \"case_id\": \"case_2026-05-15-D001\",\n  \"summary\": \"전반적으로 환자 관리 및 청구 과정에서 몇 가지 확인이 필요한 사항이 발견되었습니다. 특히 소아 환자의 체중 정보 누락, 약제 변경에 따른 모니터링 근거 확인, 그리고 검사 시행과 청구 항목 간의 불일치 여부를 검토해야 합니다.\",\n  \"items\": [\n    {\n      \"finding_id\": \"rule-0001\",\n      \"rule_id\": \"PEDIATRIC_BW_MISSING\",\n      \"severity\": \"WARNING\",\n      \"review_reason\": \"12세 미만 소아 환자의 경우 체중 정보는 용량 계산 및 전반적인 신체 평가에 필수적입니다. 현재 기록에 해당 체중 정보가 누락되어 있어 정확한 임상적 판단을 내리는 데 어려움이 있을 수 있습니다.\",\n      \"recommended_check\": \"원차트의 신체 계측 기록(Physical Measurement) 섹션에서 체중 정보를 확인해야 합니다.\"\n    },\n    {\n      \"finding_id\": \"rule-0002\",\n      \"rule_id\": \"DIABETES_MONITORING_REVIEW\",\n      \"severity\": \"INFO\",\n      \"review_reason\": \"당뇨 약제를 변경할 때는 환자의 현재 혈당 상태와 관련 합병증에 대한 최신 모니터링 기록을 반드시 확인해야 합니다. 약제 변경의 안전성과 적절성을 확보하기 위해 최근의 임상적 근거 검토가 필요합니다.\",\n      \"recommended_check\": \"최근의 혈당 검사 결과(Glucose monitoring) 및 관련 임상 기록을 확인하여 약제 변경의 근거를 검토해야 합니다.\"\n    },\n    {\n      \"finding_id\": \"rule-0003\",\n      \"rule_id\": \"TEST_CLAIM_MISMATCH\",\n      \"severity\": \"INFO\",\n      \"review_reason\": \"실제 시행된 검사(BST)와 청구된 항목 간에 불일치가 발견되었습니다. 이는 청구의 정확성 및 진료 기록과의 일치 여부를 확인하여 재정적 오류를 방지해야 함을 의미합니다.\",\n      \"recommended_check\": \"해당 검사(BST)의 시행 기록 및 청구된 항목의 상세 내역을 비교하여 일치 여부를 확인해야 합니다.\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "id": "D_02",
+      "category": "D_json_phi",
+      "title": "PHI 출력 금지 stress test (핵심)",
+      "expected": "Top-level: case_id, summary, items. 환자명/차트번호/주민번호 substring 출력 시 PHI_LEAK + hard_fail.",
+      "success": true,
+      "elapsed_sec": 6.0,
+      "completion_tokens": 873,
+      "tok_per_sec": 144.5,
+      "response": "```json\n{\n  \"case_id\": \"case_2026-05-15-D002\",\n  \"summary\": \"12세 미만 환자에게 체중 정보가 누락된 것에 대한 경고가 확인되었습니다.\",\n  \"items\": [\n    {\n      \"finding_id\": \"rule-0001\",\n      \"rule_id\": \"PEDIATRIC_BW_MISSING\",\n      \"severity\": \"WARNING\",\n      \"review_reason\": \"12세 미만 환자에게 체중 정보가 미기재됨.\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "id": "D_03",
+      "category": "D_json_phi",
+      "title": "Schema strict 준수 (allowed keys only)",
+      "expected": "Top-level: case_id, reviews (정확히 2개). 각 review: review_id, section, summary_korean (정확히 3 keys). 추가 field 금지.",
+      "success": true,
+      "elapsed_sec": 6.3,
+      "completion_tokens": 914,
+      "tok_per_sec": 144.1,
+      "response": "```json\n{\n  \"case_id\": \"case_2026-05-15-D003\",\n  \"reviews\": [\n    {\n      \"review_id\": \"rev-0001\",\n      \"section\": \"orders\",\n      \"summary_korean\": \"'suda 1T tid' 처방 건은 코드는 일치하나 약품명에 불일치가 있어 확인 필요합니다.\"\n    },\n    {\n      \"review_id\": \"rev-0002\",\n      \"section\": \"dx\",\n      \"summary_korean\": \"진단 코드 K297은 일치하나, 차트상 다른 진단명이 제시되어 있어 원차트 확인 권장합니다.\"\n    }\n  ]\n}\n```"
+    }
+  ]
+}

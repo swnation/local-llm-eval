@@ -1,0 +1,23 @@
+# 평가 결과 (모델 출력은 용량 크고 매번 달라짐 — 커밋 X)
+results/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code 개인 설정
+.vscode/
+
+# 임시 백업
+*.bak
+*.tmp
+~$*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# venv (이 도구는 외부 라이브러리 불필요하지만 혹시 만든 경우)
+.venv/
+venv/

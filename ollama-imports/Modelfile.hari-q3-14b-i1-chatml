@@ -1,0 +1,17 @@
+# hari-q3-14b-i1 with explicit ChatML template (Qwen3-style).
+# Mirrors Modelfile.hari-q3-8b-i1-chatml. Default auto-template detection in
+# ollama showed instability in Step 4 (D 모두 hard_fail with JSON_EXTRA_TEXT,
+# 응답에 reasoning trace + 설명문이 JSON 앞에 출현). ChatML 명시로 stop token
+# 정확히 잡고 더 일관된 응답 기대.
+
+FROM C:/Users/swnat/.lmstudio/models/mradermacher/hari-q3-14b-i1-GGUF/hari-q3-14b.i1-Q4_K_S.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"

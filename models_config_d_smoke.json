@@ -1,0 +1,23 @@
+{
+  "_comment": "Step 3 D smoke run. 빠른 Ollama 모델 2개 × D_01~D_03 (3 prompts) = 6 calls. 5~10분 소요 예상.",
+  "_purpose": "JSON-only 엄격 규칙(§2.4) + PHI substring 검사가 실제 응답에서 어떻게 동작하는지 확인 + v0.2 prompts 실 LLM 응답 1차 sanity.",
+  "_eval_set": "prompts/test_suite_v0.2_d_only.json",
+  "_after_smoke": "응답을 사람이 직접 보고 hard_fail / extra text / PHI leak 패턴 확인 → Step 2 채점 스크립트 rubric 표현 조정 입력으로 사용",
+
+  "models": [
+    {
+      "label": "gpt-oss-20b-low",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "inference_options": {
+        "reasoning_effort": "low"
+      }
+    },
+    {
+      "label": "gemma4-latest",
+      "provider": "ollama",
+      "ollama_name": "gemma4:latest",
+      "inference_options": {}
+    }
+  ]
+}

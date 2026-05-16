@@ -1,0 +1,14 @@
+# mradermacher imatrix quant of hari-q3-14b (Qwen3-based Korean medical fine-tune)
+# Minimal Modelfile: rely on GGUF embedded chat_template metadata.
+
+FROM C:/Users/swnat/.lmstudio/models/mradermacher/hari-q3-14b-i1-GGUF/hari-q3-14b.i1-Q4_K_S.gguf
+
+# --- Fallback (uncomment if needed, ChatML / Qwen-style) ---
+# TEMPLATE """{{- if .System }}<|im_start|>system
+# {{ .System }}<|im_end|>
+# {{ end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+# {{ .Content }}<|im_end|>
+# {{ end }}<|im_start|>assistant
+# """
+# PARAMETER stop "<|im_end|>"
+# PARAMETER stop "<|im_start|>"

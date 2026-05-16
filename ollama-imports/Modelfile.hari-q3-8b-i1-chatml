@@ -1,0 +1,16 @@
+# hari-q3-8b-i1 with explicit ChatML template (Qwen3-style).
+# Default Modelfile (FROM only) showed echo + instability in A_02 (input prompt
+# repeated in output, max_tokens hit). Likely auto-template detection issue.
+# Use this fallback if default fails.
+
+FROM C:/Users/swnat/.lmstudio/models/mradermacher/hari-q3-8b-i1-GGUF/hari-q3-8b.i1-Q4_K_S.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{- range .Messages }}<|im_start|>{{ .Role }}
+{{ .Content }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"

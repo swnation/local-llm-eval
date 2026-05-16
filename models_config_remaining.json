@@ -1,0 +1,39 @@
+{
+  "_comment": "magistral-small-2509가 VRAM 부족으로 0.5 tok/s까지 떨어져 skip. 남은 3개 모델만 별도 실행. comparison.md는 별도 생성되니 part1 결과와 합쳐서 분석.",
+
+  "_expected_runtime": "약 30~40분 (qwen3.6-27b가 가장 무거움)",
+  "_total_calls": "3 모델 × 21 프롬프트 = 63회 호출",
+  "_context": "model 6 (ministral-3-14b-reasoning)까지 정상 완료. model 7 (magistral)은 OOM으로 skip.",
+
+  "models": [
+    {
+      "label": "exaone4-32b-iq4-4k",
+      "provider": "ollama",
+      "ollama_name": "exaone4-32b-iq4-4k:latest",
+      "_role": "한국어 polish 참조 (NC 라이선스, production 불가, 측정만)",
+      "inference_options": {}
+    },
+    {
+      "label": "qwen3.6-27b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-27b",
+      "_role": "dense reference (능력 ceiling)",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "gemma-4-26b-a4b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-26b-a4b",
+      "_role": "Gemma 계열 cross-check",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    }
+  ]
+}

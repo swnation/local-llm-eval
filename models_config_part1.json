@@ -1,0 +1,95 @@
+{
+  "_comment": "32GB(가용 19.7GB) 환경에서 안전하게 돌릴 10개 모델. 11~14번 무거운 모델은 models_config_part2.json에서 64GB 업그레이드 후 실행.",
+
+  "_expected_runtime": "약 120~150분 (모델 timeout 발생 시 더 길 수 있음)",
+  "_total_calls": "10 모델 × 21 프롬프트 = 210회 호출",
+
+  "models": [
+    {
+      "label": "gpt-oss-20b-low",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "inference_options": {
+        "reasoning_effort": "low"
+      }
+    },
+    {
+      "label": "clinical-hari-q5-current",
+      "provider": "ollama",
+      "ollama_name": "clinical-hari-q5:latest",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-8b-i1",
+      "provider": "lm_studio",
+      "lms_key": "hari-8b-i1",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "gemma4-latest",
+      "provider": "ollama",
+      "ollama_name": "gemma4:latest",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-14b-i1",
+      "provider": "lm_studio",
+      "lms_key": "hari-14b-i1",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "ministral-3-14b-reasoning",
+      "provider": "lm_studio",
+      "lms_key": "mistralai/ministral-3-14b-reasoning",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "magistral-small-2509",
+      "provider": "lm_studio",
+      "lms_key": "mistralai/magistral-small-2509",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "exaone4-32b-iq4-4k",
+      "provider": "ollama",
+      "ollama_name": "exaone4-32b-iq4-4k:latest",
+      "inference_options": {}
+    },
+    {
+      "label": "qwen3.6-27b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-27b",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "gemma-4-26b-a4b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-26b-a4b",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    }
+  ]
+}

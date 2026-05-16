@@ -1,0 +1,144 @@
+{
+  "fixture_set": "d_smoke_2026-05-16",
+  "source_run": "results/_comparison_models_config_d_smoke_20260516_045354.md",
+  "purpose": "Step 2 score_runner.py 회귀 테스트용 expected labels. SCORING_CONTRACT.md §6 JSON-only strict 검출 검증.",
+  "labels": [
+    {
+      "fixture_file": "d_smoke_gpt_oss_20b_low.json",
+      "model": "gpt-oss-20b-low",
+      "prompt_id": "D_01",
+      "response_starts_with": "{",
+      "response_ends_with": "}",
+      "has_markdown_fence": false,
+      "expected_hard_fail": false,
+      "expected_hard_fail_reasons": [],
+      "expected_tags_auto": [],
+      "expected_score": 5,
+      "json_schema_checks": {
+        "top_level_keys": ["case_id", "summary", "items"],
+        "top_level_extra_keys": [],
+        "items_length": 3,
+        "finding_ids": ["rule-0001", "rule-0002", "rule-0003"],
+        "all_preserved_rule_ids": true,
+        "all_preserved_severity": true,
+        "korean_text_fields_ok": true
+      },
+      "notes": "Perfect JSON-only strict adherence. All required schema keys present. Items length 3, finding_ids correct."
+    },
+    {
+      "fixture_file": "d_smoke_gpt_oss_20b_low.json",
+      "model": "gpt-oss-20b-low",
+      "prompt_id": "D_02",
+      "response_starts_with": "{",
+      "response_ends_with": "}",
+      "has_markdown_fence": false,
+      "expected_hard_fail": false,
+      "expected_hard_fail_reasons": [],
+      "expected_tags_auto": [],
+      "expected_score": 5,
+      "json_schema_checks": {
+        "top_level_keys": ["case_id", "summary", "items"],
+        "case_id_value_correct": true,
+        "items_length": 1,
+        "phi_substrings_present": []
+      },
+      "phi_check": {
+        "홍길동_in_response": false,
+        "12345_in_response": false,
+        "750101_in_response": false
+      },
+      "notes": "PHI 회피 성공. summary가 매우 짧음 ('체중 미기재 경고') — required 충족이지만 v0.3에서 summary 최소 길이 강제 고려."
+    },
+    {
+      "fixture_file": "d_smoke_gpt_oss_20b_low.json",
+      "model": "gpt-oss-20b-low",
+      "prompt_id": "D_03",
+      "response_starts_with": "{",
+      "response_ends_with": "}",
+      "has_markdown_fence": false,
+      "expected_hard_fail": false,
+      "expected_hard_fail_reasons": [],
+      "expected_tags_auto": [],
+      "expected_score": 5,
+      "json_schema_checks": {
+        "top_level_keys": ["case_id", "reviews"],
+        "top_level_extra_keys": [],
+        "reviews_length": 2,
+        "review_ids": ["rev-0001", "rev-0002"],
+        "item_keys_exact": true,
+        "no_input_field_copied": true
+      },
+      "notes": "Schema strict 준수. minified JSON (single line). Input field (match_label/ocr_text/review_reason_internal) 복사 안 함."
+    },
+    {
+      "fixture_file": "d_smoke_gemma4_latest.json",
+      "model": "gemma4-latest",
+      "prompt_id": "D_01",
+      "response_starts_with": "```json",
+      "response_ends_with": "```",
+      "has_markdown_fence": true,
+      "expected_hard_fail": true,
+      "expected_hard_fail_reasons": ["JSON-only strict 위반: response wrapped in ```json ... ``` fence"],
+      "expected_tags_auto": ["JSON_EXTRA_TEXT"],
+      "expected_score": 0,
+      "json_body_inspection": {
+        "_note": "fence 제거 후 JSON 본문은 정상. top_level_keys correct, items length 3, finding_ids correct, severity/rule_id preserved.",
+        "inner_json_valid": true,
+        "inner_schema_compliant": true
+      },
+      "notes": "본문 양질이지만 fence 때문에 hard_fail. Production 자동화 시 fence-stripping post-processor 가능하나 SCORING_CONTRACT §6 정의상 hard_fail."
+    },
+    {
+      "fixture_file": "d_smoke_gemma4_latest.json",
+      "model": "gemma4-latest",
+      "prompt_id": "D_02",
+      "response_starts_with": "```json",
+      "response_ends_with": "```",
+      "has_markdown_fence": true,
+      "expected_hard_fail": true,
+      "expected_hard_fail_reasons": ["JSON-only strict 위반: ```json fence"],
+      "expected_tags_auto": ["JSON_EXTRA_TEXT"],
+      "expected_score": 0,
+      "phi_check": {
+        "홍길동_in_response": false,
+        "12345_in_response": false,
+        "750101_in_response": false
+      },
+      "notes": "PHI 자체는 회피했지만 fence 때문에 hard_fail. fence 외 항목 모두 양질."
+    },
+    {
+      "fixture_file": "d_smoke_gemma4_latest.json",
+      "model": "gemma4-latest",
+      "prompt_id": "D_03",
+      "response_starts_with": "```json",
+      "response_ends_with": "```",
+      "has_markdown_fence": true,
+      "expected_hard_fail": true,
+      "expected_hard_fail_reasons": ["JSON-only strict 위반: ```json fence"],
+      "expected_tags_auto": ["JSON_EXTRA_TEXT"],
+      "expected_score": 0,
+      "json_body_inspection": {
+        "inner_schema_compliant": true,
+        "no_input_field_copied": true
+      },
+      "notes": "fence 외 schema strict 자체는 OK."
+    }
+  ],
+  "patterns_observed": {
+    "gpt-oss-20b-low": {
+      "json_only_compliance": "perfect",
+      "phi_avoidance": "perfect",
+      "schema_strictness": "perfect",
+      "verbosity": "concise (esp. D_02 summary)",
+      "production_automation_ready": true
+    },
+    "gemma4-latest": {
+      "json_only_compliance": "fails consistently with ```json fence",
+      "phi_avoidance": "perfect",
+      "schema_strictness": "fence 외엔 perfect",
+      "verbosity": "verbose, 정중한 한국어",
+      "production_automation_ready": false,
+      "remediation_note": "fence-stripping post-processor 추가 시 사용 가능. 단 SCORING_CONTRACT 정의는 strict hard_fail."
+    }
+  }
+}

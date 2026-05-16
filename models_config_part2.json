@@ -1,0 +1,58 @@
+{
+  "_comment": "64GB RAM 업그레이드 완료 후 실행할 무거운 4개 모델. part1과 동일한 21개 프롬프트로 평가.",
+
+  "_expected_runtime": "약 75~110분",
+  "_total_calls": "4 모델 × 21 프롬프트 = 84회 호출",
+  "_prerequisite": "64GB RAM 업그레이드 필수. 32GB 환경에서는 OOM 위험 큼.",
+
+  "models": [
+    {
+      "label": "qwen3.6-35b-a3b-thinking-off",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "_role": "MAIN — rule classification 도전자",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {
+        "chat_template_kwargs": {"enable_thinking": false}
+      }
+    },
+    {
+      "label": "qwen3.6-35b-a3b-thinking-on",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "_role": "복잡 추론 / long-tail RAG 후보",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {
+        "chat_template_kwargs": {"enable_thinking": true}
+      }
+    },
+    {
+      "label": "gemma-4-31b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-31b",
+      "_role": "대형 dense reference",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "nemotron-3-nano-omni",
+      "provider": "lm_studio",
+      "lms_key": "nvidia/nemotron-3-nano-omni",
+      "_role": "멀티모달 / 문서 understanding 실험",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    }
+  ]
+}

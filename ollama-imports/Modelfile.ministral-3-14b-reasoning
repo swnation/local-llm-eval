@@ -1,0 +1,15 @@
+# Mistral AI Ministral 3 14B Reasoning (lmstudio-community Q6_K quant)
+# Reasoning model. Updated 2026-05-16: PARAMETER num_ctx 8192 to avoid OOM on 32GB RAM.
+# (Initial import attempt with default ctx requested 38 GiB — model + KV cache too large.)
+
+FROM C:/Users/swnat/.lmstudio/models/lmstudio-community/Ministral-3-14B-Reasoning-2512-GGUF/Ministral-3-14B-Reasoning-2512-Q6_K.gguf
+
+PARAMETER num_ctx 8192
+
+# Note: reasoning model — output may include <think>...</think> blocks. That's expected from the model.
+# For JSON-only strict prompts (D category), <think> blocks in output may cause hard_fail per SCORING_CONTRACT §6.
+
+# --- Fallback (uncomment if needed, Mistral V7 template) ---
+# TEMPLATE """{{- range .Messages }}{{- if eq .Role "system" }}[SYSTEM_PROMPT]{{ .Content }}[/SYSTEM_PROMPT]{{- else if eq .Role "user" }}[INST]{{ .Content }}[/INST]{{- else if eq .Role "assistant" }}{{ .Content }}</s>{{- end }}{{- end }}"""
+# PARAMETER stop "</s>"
+# PARAMETER stop "[INST]"

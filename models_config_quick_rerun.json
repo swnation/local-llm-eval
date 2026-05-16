@@ -1,0 +1,59 @@
+{
+  "_comment": "32GB 환경 quick rerun용 7개 모델. v0.2 §6의 평가 대상. 모두 Ollama로 통일 (측정 일관성 + 서버 1개만 띄움).",
+  "_note": "LM Studio 3개 모델(hari-8b-i1, hari-14b-i1, ministral-3-14b-reasoning)은 ollama-imports/import.ps1로 Ollama에 import 후 본 config 사용.",
+  "_eval_set": "prompts/test_suite_v0.2.json",
+  "_total_calls": "7 모델 × 13 프롬프트 = 91회 호출",
+  "_expected_runtime": "약 30~60분",
+  "_license_note": "exaone4-32b-iq4-4k는 NC 라이선스 (production 불가, 참조 측정만).",
+  "_lm_studio_required": false,
+
+  "models": [
+    {
+      "label": "gpt-oss-20b-low",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "inference_options": {
+        "reasoning_effort": "low"
+      }
+    },
+    {
+      "label": "gemma4-latest",
+      "provider": "ollama",
+      "ollama_name": "gemma4:latest",
+      "inference_options": {}
+    },
+    {
+      "label": "clinical-hari-q5-current",
+      "provider": "ollama",
+      "ollama_name": "clinical-hari-q5:latest",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-8b-i1",
+      "provider": "ollama",
+      "ollama_name": "hari-q3-8b-i1:latest",
+      "_imported_from": "LM Studio: mradermacher/hari-q3-8b-i1-GGUF/hari-q3-8b.i1-Q4_K_S.gguf (see ollama-imports/Modelfile.hari-q3-8b-i1)",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-14b-i1",
+      "provider": "ollama",
+      "ollama_name": "hari-q3-14b-i1:latest",
+      "_imported_from": "LM Studio: mradermacher/hari-q3-14b-i1-GGUF/hari-q3-14b.i1-Q4_K_S.gguf (see ollama-imports/Modelfile.hari-q3-14b-i1)",
+      "inference_options": {}
+    },
+    {
+      "label": "ministral-3-14b-reasoning",
+      "provider": "ollama",
+      "ollama_name": "ministral-3-14b-reasoning:latest",
+      "_imported_from": "LM Studio: lmstudio-community/Ministral-3-14B-Reasoning-2512-GGUF/Ministral-3-14B-Reasoning-2512-Q6_K.gguf (see ollama-imports/Modelfile.ministral-3-14b-reasoning)",
+      "inference_options": {}
+    },
+    {
+      "label": "exaone4-32b-iq4-4k",
+      "provider": "ollama",
+      "ollama_name": "exaone4-32b-iq4-4k:latest",
+      "inference_options": {}
+    }
+  ]
+}

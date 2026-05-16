@@ -1,0 +1,168 @@
+{
+  "_comment": "선생님 환경 실측 기반 최종 설정 (2026-05-15). LM Studio 9개 + Ollama 4개 = 총 14개 평가 (qwen3-vl:8b는 이전 평가에서 배제 결정).",
+
+  "_field_guide": {
+    "label": "결과 파일명에 사용되는 고유 라벨",
+    "provider": "'lm_studio' 또는 'ollama'",
+    "lms_key": "LM Studio용. 'lms ls' 출력의 정확한 키",
+    "ollama_name": "Ollama용. 'ollama list' 출력의 NAME 칼럼 그대로",
+    "load_options": "lms load 명령 옵션. gpu/context_length/ttl (LM Studio 전용)",
+    "inference_options": "API 호출에 추가될 옵션 (선택)"
+  },
+
+  "_excluded": {
+    "qwen3-vl:8b": "이전 세션에서 OCR/텍스트 모두 환각·속도 문제로 배제 확정. 재평가 의미 없음."
+  },
+
+  "_memory_warning": "32GB RAM 환경에서 마지막 4개(11-14번)는 빡빡할 수 있음. OOM 시 해당 항목 일시 제외 후 64GB 업그레이드 완료 후 재실행.",
+
+  "_estimated_runtime_full": "14개 모델 × 21 프롬프트 = 294회 호출. 약 2.5~3시간.",
+
+  "models": [
+    {
+      "label": "gpt-oss-20b-low",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "_role": "rule reviewer baseline",
+      "inference_options": {
+        "reasoning_effort": "low"
+      }
+    },
+    {
+      "label": "clinical-hari-q5-current",
+      "provider": "ollama",
+      "ollama_name": "clinical-hari-q5:latest",
+      "_role": "current fast formatter baseline",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-8b-i1",
+      "provider": "lm_studio",
+      "lms_key": "hari-8b-i1",
+      "_role": "formatter challenger (i1 imatrix vs clinical-hari-q5 static)",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "gemma4-latest",
+      "provider": "ollama",
+      "ollama_name": "gemma4:latest",
+      "_role": "small Gemma 4 (9.6GB) - 작은 모델 비교군",
+      "inference_options": {}
+    },
+    {
+      "label": "hari-14b-i1",
+      "provider": "lm_studio",
+      "lms_key": "hari-14b-i1",
+      "_role": "polish candidate / reviewer dark horse",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "ministral-3-14b-reasoning",
+      "provider": "lm_studio",
+      "lms_key": "mistralai/ministral-3-14b-reasoning",
+      "_role": "reasoning reviewer 신규 후보",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "magistral-small-2509",
+      "provider": "lm_studio",
+      "lms_key": "mistralai/magistral-small-2509",
+      "_role": "reasoning reviewer 보조",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "exaone4-32b-iq4-4k",
+      "provider": "ollama",
+      "ollama_name": "exaone4-32b-iq4-4k:latest",
+      "_role": "한국어 polish 참조 (NC 라이선스 - 의원 사용 불가, 측정만)",
+      "_warning": "느림 (6-7 tok/s 예상). 17 프롬프트 8-10분 소요.",
+      "inference_options": {}
+    },
+    {
+      "label": "qwen3.6-27b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-27b",
+      "_role": "dense reference (능력 ceiling)",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "gemma-4-26b-a4b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-26b-a4b",
+      "_role": "Gemma 계열 cross-check",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 8192
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "qwen3.6-35b-a3b-thinking-off",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "_role": "MAIN — rule classification 도전자",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {
+        "chat_template_kwargs": {"enable_thinking": false}
+      }
+    },
+    {
+      "label": "qwen3.6-35b-a3b-thinking-on",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "_role": "복잡한 추론 / long-tail RAG 후보",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {
+        "chat_template_kwargs": {"enable_thinking": true}
+      }
+    },
+    {
+      "label": "gemma-4-31b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-31b",
+      "_role": "Gemma 대형 dense reference",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "nemotron-3-nano-omni",
+      "provider": "lm_studio",
+      "lms_key": "nvidia/nemotron-3-nano-omni",
+      "_role": "멀티모달/문서 understanding 실험 (텍스트 평가도 일단 시도)",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096
+      },
+      "inference_options": {}
+    }
+  ]
+}

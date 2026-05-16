@@ -5,6 +5,10 @@
 
 **새 세션 entry point**: [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) — 역할/현재 상태/결정/금지사항/다음 액션이 한 페이지로. 본 README는 사용법/실행 가이드 위주.
 
+**현재 진행 문서 (two-track)**:
+- [docs/experiment-track-2026-05-16.md](docs/experiment-track-2026-05-16.md) — v0.2 quick rerun 실험/해석/R4 상태
+- [docs/local-llm-upgrade-plan.md](docs/local-llm-upgrade-plan.md) — Qwen/KV cache/RAG/64GB+ 업그레이드 계획
+
 ---
 
 ## §0. 폴더 목적

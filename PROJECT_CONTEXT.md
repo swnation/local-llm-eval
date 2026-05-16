@@ -96,6 +96,11 @@
 
 ## §7. 다음 액션 (우선순위 순)
 
+현재 작업은 두 트랙으로 분리:
+
+- [Track 1 — v0.2 Local LLM Eval Experiments](docs/experiment-track-2026-05-16.md): 지금까지의 D smoke, quick rerun, scorer, 보조 실험, R4 sign-off.
+- [Track 2 — Local LLM Upgrade Plan](docs/local-llm-upgrade-plan.md): Qwen3.6 preview, q8 KV cache, 64GB/128GB, retrieval/memory 확장.
+
 1. **R4 codex review 진행** — packet + report.md만 먼저 전달. 응답 기다림.
 2. **R4 응답이 GO이면**: gpt-oss medium A/B/D 검증 (현재 C만 측정됨) → 64GB part 2 진입 준비
 3. **R4 응답이 CONDITIONAL GO이면**: Q4의 추가 검증 항목 수행 → R4.1

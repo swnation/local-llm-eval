@@ -121,40 +121,38 @@ Decision value:
 
 ## 5. gpt-oss-20b Upgrade Work
 
-Current provisional production path:
+### Operational rule (R4.1 GO, 2026-05-16 — pinned)
+
+> **medium improves C only; medium is unsafe for D JSON-only.**
+
+Verified production path (after R4.1 sign-off):
 
 ```text
-D_json_phi: reasoning_effort = low
-A/B/C prose: reasoning_effort = medium
+A/B prose:     reasoning_effort = low      # medium ties low on score, low is faster
+C prose:       reasoning_effort = medium   # medium fixes case_id-only short replies (avg 2.00 -> 3.33)
+D JSON-only:   reasoning_effort = low      # medium produces ```json fence on D_02 (hard_fail)
 ```
 
-Missing validation:
+R4 MF-1 verification (`reviews/quick-rerun-2026-05-16-report.md §5.7`) collapsed the original "A/B/C=medium / D=low" recommendation into "C=medium only / D/A/B=low". Do not widen medium to A/B/D without re-running the same comparison.
 
-- `gpt-oss medium` has only been tested for C.
-- A/B/D medium should be measured before finalizing the dynamic-effort policy.
+### Result snapshot
 
-Minimum run:
+| Category | low (baseline) | medium (§5.7) | Δ |
+|---|---|---|---|
+| A_charting | 2.50 | 2.50 | 0 |
+| B_needs_review | 2.33 | 2.33 | 0 |
+| C_rule_finding | 2.00 | 3.33 | +1.33 |
+| D_json_phi | 4.67 | 3.00 (D_02 hard_fail) | -1.67 |
+| HF# | 0 | 1 | +1 |
 
-```text
-gpt-oss-20b-medium:
-  A_01..A_04
-  B_01..B_03
-  D_01..D_03
-```
+Scenario C composite under the pinned policy:
+`(A:2.50x4 + B:2.33x3 + C:3.33x3 + D:4.67x3) / 13 = 3.15`, hard_fail 0.
 
-Questions:
+### Open follow-ups (selective, post-64GB OK)
 
-- Does medium preserve D JSON-only compliance?
-- Does medium improve or harm A/B?
-- Does medium add verbosity or forbidden expressions?
-- Is low still preferable for D?
-
-Promotion condition:
-
-- hard_fail remains 0
-- D average remains near 4.67
-- C remains better than low
-- A/B do not regress materially
+- gpt-oss `reasoning_effort = "high"` for 1~2 prompts to measure medium-vs-high trade-off.
+- ministral with explicit Mistral V7 template to diagnose the D_02 1-token EOT pattern.
+- Re-run the full 13-prompt grid only if Ollama/runtime defaults change in a way that could affect baseline comparability.
 
 ---
 

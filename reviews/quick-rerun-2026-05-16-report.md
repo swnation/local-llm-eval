@@ -10,16 +10,17 @@
 
 ---
 
-## §0. TL;DR
+## §0. TL;DR (R4 codex CONDITIONAL GO + MF-1 검증 후 갱신)
 
-1. **Production 자동화(D 카테고리 JSON-only) 후보 2개**: `clinical-hari-q5-current` + `gpt-oss-20b-low`. 둘 다 D avg 4.67, hard_fail 0건.
-2. **종합 1위**: `clinical-hari-q5-current` (avg 3.15, retry 적용 시 ~3.4). B/C 자유 서술 reviewer 1순위 + D 자동화 동시 가능.
-3. **종합 2위**: `gpt-oss-20b` (avg 2.85 baseline, medium 적용 시 ~3.0 추정). **hard_fail 0건**. `reasoning_effort='low'`는 C 카테고리 부실 → **`medium`으로 C avg 2.00→3.33 회복** (§5.2).
-4. **hari-q3 시리즈 (8b/14b)**: default Modelfile의 ollama auto-template 부정확. **ChatML 명시 Modelfile로 14b A 2.50→3.00 / 8b A 2.50→2.75 회복** (§5.1, §5.5). D 카테고리는 reasoning trace 노출로 여전히 hard_fail.
-5. **clinical-hari-q5 A_02 단발 빈응답**: retry x3 모두 정상 응답 — **단발 ollama quirk** 확정 (§5.6). 단 응답이 모두 JSON 형식 — A 카테고리 prose 강제 system prompt 보강 필요.
-6. **gemma4-latest**: 한국어는 자연스럽지만 D 카테고리 항상 ```json fence → 자동화 불가 (post-processor 필요).
-7. **ministral-3-14b-reasoning D_02**: max_tokens 4096 + 3회 retry 모두 1 token EOT — **재현 가능한 모델 한계** (§5.3).
-8. **exaone4-32b-iq4-4k**: 모델 weights 17GB > VRAM 16GB → CUDA init 실패. **64GB part 2 + GPU+CPU split 재시도 권장**.
+1. **Production 자동화(D 카테고리 JSON-only) 후보 2개**: `clinical-hari-q5-current` + `gpt-oss-20b-low` (D=low). 둘 다 D avg 4.67, hard_fail 0건.
+2. **Provisional production candidate**: `gpt-oss-20b` 단독 + **dynamic reasoning_effort: D=low / C=medium / A/B=low** (R4 MF-1 검증 §5.7). 종합 avg 추정 **3.15** + hard_fail 0건. 단일 모델 + 운영 overlay 없음.
+3. **점수상 1위**: `clinical-hari-q5-current` (avg 3.15, retry 시 ~3.4). 단 A_02 retry 시 JSON 형식 응답 경향(§5.6) → **task-format overlay 운영 필요**. 점수 동률이지만 운영 단순성에서 gpt-oss 우위.
+4. **§5.7 핵심 발견**: medium은 A/B에서 점수 향상 0건, **D_02에서 fence hard_fail 발생** — medium 적용 범위를 C 카테고리에 한정해야 함 (최초 권고 "A/B/C=medium" 에서 "C=medium만" 으로 축소).
+5. **hari-q3 시리즈 (8b/14b)**: default Modelfile의 ollama auto-template 부정확. **ChatML 명시 Modelfile로 14b A 2.50→3.00 / 8b A 2.50→2.75 회복** (§5.1, §5.5). D 카테고리는 reasoning trace 노출로 여전히 hard_fail.
+6. **clinical-hari-q5 A_02 단발 빈응답**: retry x3 모두 정상 응답 — **단발 ollama quirk** 확정 (§5.6). 단 응답이 모두 JSON 형식 — A 카테고리 prose 강제 overlay 필요.
+7. **gemma4-latest**: 한국어는 자연스럽지만 D 카테고리 항상 ```json fence → 자동화 불가 (post-processor 필요).
+8. **ministral-3-14b-reasoning D_02**: max_tokens 4096 + 3회 retry 모두 1 token EOT — **재현 가능한 모델 한계** (§5.3).
+9. **exaone4-32b-iq4-4k**: 모델 weights 17GB > VRAM 16GB → CUDA init 실패. **64GB part 2 + GPU+CPU split 재시도 권장**.
 
 ---
 
@@ -43,9 +44,10 @@
 
 | 순위 | 모델 (variant) | A | B | C | D | Total | HF# | 비고 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | clinical-hari-q5-current | 2.00 (3.4 retry시) | **3.00** | **3.33** | **4.67** | **3.15** (~3.4) | 1→0 | A_02 단발 quirk (§5.6 retry 3/3 정상) |
-| 2 | gpt-oss-20b (medium) ★ | 2.50† | 2.33† | **3.33** | **4.67**† | ~3.0§ | 0 | medium은 C만 검증, A/B/D는 low 결과 차용 |
-| 3 | gpt-oss-20b-low | 2.50 | 2.33 | 2.00 | **4.67** | 2.85 | **0** | low는 C 카테고리 부실 (case_id 한 줄) |
+| 1 | clinical-hari-q5-current | 2.00 (3.4 retry시) | **3.00** | **3.33** | **4.67** | **3.15** (~3.4) | 1→0 | A_02 단발 quirk (§5.6 retry 3/3 정상). 단 JSON 형식 응답 — overlay 필요 |
+| 2 | **gpt-oss-20b (dynamic effort)** ★ | 2.50 | 2.33 | **3.33** | **4.67** | **3.15** | **0** | provisional production candidate. D=low / C=medium / A/B=low (§5.7 R4 MF-1) |
+| 3 | gpt-oss-20b-low (baseline) | 2.50 | 2.33 | 2.00 | **4.67** | 2.85 | **0** | low only는 C 부실 (case_id 한 줄) |
+| 4 | gpt-oss-20b-medium (§5.7) | 2.50 | 2.33 | 3.33 | 3.00 | 2.77 | **1** | medium은 D_02 fence hard_fail. A/B 점수 변화 없음 |
 | 4 | **hari-14b-i1-chatml** ★ | **3.00** | 2.67 | 3.00 | 0.00 | 2.23 | 3 | A 카테고리 1위. D는 reasoning trace로 HF |
 | 5 | hari-8b-i1-chatml ★ | 2.75 | 2.67 | 3.00 | 0.00 | 2.15 | 3 | ChatML로 PHI_LEAK/HALLUC 제거 |
 | 6 | ministral-3-14b-reasoning | **2.75** | 2.67 | 3.00 | 0.00 | 2.15 | 3 | D 모두 HF (reasoning trace + D_02 빈응답 reproducible) |
@@ -54,9 +56,8 @@
 | 9 | hari-8b-i1 (default Modelfile) | 2.50 | 2.67 | 2.67 | 0.00 | 2.00 | 3 | template 깨짐 (입력 echo) — chatml 필수 |
 | - | exaone4-32b-iq4-4k | 0.00 | - | - | - | 0.00 | 1 | **VRAM 16GB 부족** — 평가 불가 |
 
-> **카테고리별 1위 굵게 표시**. ★ = 보조 실험으로 발견된 권장 운영 모드. 13 prompt 만점 5점, hard_fail=0점.
-> † = `gpt-oss-20b (medium)` 의 A/B/D는 low 결과 차용 (보조 실험은 C만). 실제 medium 종합 평가는 v0.3 round에서 권장.
-> § = medium 추정치는 A/B/D가 low와 동등하다는 가정.
+> **카테고리별 1위 굵게 표시**. ★ = R4 MF-1 검증 후 권장 운영 모드. 13 prompt 만점 5점, hard_fail=0점.
+> 시나리오 C (gpt-oss dynamic effort) = D는 low 사용 / C는 medium 사용 / A·B는 low 사용. medium은 C 카테고리에 한정.
 
 ---
 
@@ -200,10 +201,12 @@
 - C_02 만점 5점 — 당뇨 모니터링 INFO finding을 모범적으로 문장화 (clinical-hari-q5와 동급).
 - C_03 변화 없음 — `"자동 오류 확정 아님"` 같은 표현 누락. 모델 능력 한계 가능성.
 
-**결론**: gpt-oss-20b 운영 시 task 카테고리별 dynamic reasoning_effort 권장:
-- D 카테고리 (JSON-only): `low` (확실히 안정 + 빠름)
-- A/B/C 카테고리 (자유 서술): `medium` (응답 부실 방지)
-- 또는 일괄 `medium` (속도 trade-off 수용).
+**결론** (§5.7 R4 MF-1 검증으로 정정): gpt-oss-20b 운영 시 task 카테고리별 dynamic reasoning_effort 권장:
+- C 카테고리 (Rule finding 문장화): `medium` (avg 2.00→3.33 명확 개선)
+- D 카테고리 (JSON-only): `low` (medium에서 D_02 hard_fail 발생, §5.7 참조)
+- A/B 카테고리: `low` (medium 점수 향상 없음, §5.7 참조)
+
+→ 최초 권고였던 "A/B/C=medium / D=low" 는 §5.7에서 **"C=medium / D=low / A/B=low"** 로 좁혀짐 (medium 적용 범위 축소).
 
 ### §5.3 ministral D_02 max_tokens 늘려 단독 재시도
 
@@ -250,6 +253,39 @@
 - D_02에서 **PHI_LEAK 1건** — reasoning 안에서 input PHI 노출 (8b chatml과 동일 패턴).
 
 **결론**: hari-q3-14b도 **ChatML Modelfile 필수**. 8b와 같은 결론.
+
+### §5.7 R4 MF-1 — gpt-oss medium A/B/D 검증 (2026-05-16 21:06)
+
+**배경**: R4 codex review가 "medium은 C만 검증됨, A/B/D 검증 없이 시나리오 C를 production 후보로 두기엔 약점"으로 must-fix 지정.
+
+**설정**: `gpt-oss:20b` + `reasoning_effort='medium'` × A_01~A_04 + B_01~B_03 + D_01~D_03 = 10 prompts. (C는 §5.2에서 이미 측정).
+
+**결과** (`results/gpt-oss-20b-medium-abd_20260516_210613.json` + `_scored_gpt_oss_medium_abd_20260516.md`):
+
+| 카테고리 | low (baseline) | medium (§5.7) | Δ | 해석 |
+|---|---|---|---|---|
+| A_charting | 2.50 | 2.50 | 0 | medium 이점 없음 (A_01:2, A_02:2, A_03:3, A_04:3 동일) |
+| B_needs_review | 2.33 | 2.33 | 0 | medium 이점 없음 (B_01:2, B_02:3, B_03:2 동일) |
+| D_json_phi | 4.67 | **3.00** | **-1.67** ★ | **D_02에서 ```json fence hard_fail** (low에선 정상) |
+| HF# | 0 | **1** | +1 | medium은 D에서 위험 |
+
+**결정적 발견**: medium에서 D_02 응답이 ` ```json ... ``` ` fence로 감쌈 → JSON_EXTRA_TEXT hard_fail. low에서는 정상 raw JSON 반환. **medium은 D에 사용 금지**.
+
+**운영 정책 재조정**:
+
+| 카테고리 | 권장 effort | 근거 |
+|---|---|---|
+| **C** | **medium** | C avg 2.00→3.33 (§5.2). 유일한 명확 개선 영역 |
+| **D** | **low** | D_02 medium hard_fail (본 §5.7). low는 4.67 안정 |
+| **A/B** | **low** | medium 점수 향상 0건. low가 빠르고 동등 결과 |
+
+**시나리오 C 가설 갱신** ("D=low, C=medium, A/B=low"):
+
+(A:2.50×4 + B:2.33×3 + C:3.33×3 + D:4.67×3) / 13 = **3.15**
+
+→ clinical-hari-q5-current (3.15)와 동률 점수 + **hard_fail 0건 (D=low 유지 시)**. 시나리오 C는 여전히 valid — medium 적용 범위만 좁힘.
+
+---
 
 ### §5.6 clinical-hari-q5 A_02 빈응답 진단 (retry x3)
 
@@ -316,25 +352,25 @@
 
 ### 통합 채택 시나리오
 
-- **시나리오 A (단일 모델)**: `clinical-hari-q5-current`. A/B/C/D 모두 통과 가능 (avg 3.15). A_02 단발 빈응답은 retry로 회피 가능. 가장 안정적 production 후보.
-- **시나리오 B (역할 분리)**: Formatter = `ministral` 또는 `gemma4`, Reviewer = `clinical-hari-q5`, JSON pipeline = `gpt-oss-low`. 모델 로딩 overhead 큼.
-- **시나리오 C (gpt-oss 단독, dynamic reasoning_effort)** ★ **추천**:
-  - D 카테고리: `reasoning_effort='low'` (빠르고 안정, D avg 4.67)
-  - A/B/C 카테고리: `reasoning_effort='medium'` (C avg 2.00→3.33)
-  - hard_fail 0건 + 단일 모델 운영 + dynamic effort로 종합 성능 최적
-  - 추정 종합 avg ~3.0 (medium 적용 후 A/B/C 회복 가정)
-- **시나리오 D (hari 시리즈 활용)**: hari-q3-8b/14b를 모두 ChatML Modelfile로 재import 후 차팅 보조. D는 post-processor (fence/think 제거) 필수.
+- **시나리오 A (단일 모델, clinical-hari-q5)**: 점수상 가장 강한 단일 모델 후보(avg 3.15)이나, A_02 단발 빈응답 + A 카테고리 응답이 일관 JSON 형식으로 옴(§5.6) → **task-format overlay 운영 필요**. retry로만 해결되는 단순 quirk 아님.
+- **시나리오 B (역할 분리)**: Formatter = `ministral` 또는 `gemma4`, Reviewer = `clinical-hari-q5`, JSON pipeline = `gpt-oss-low`. 모델 로딩 overhead 큼. 단일 모델 운영보다 복잡.
+- **시나리오 C (gpt-oss 단독, dynamic reasoning_effort)** ★ **provisional production candidate** (R4 codex CONDITIONAL GO → MF-1 검증 후 GO):
+  - **C 카테고리**: `reasoning_effort='medium'` (avg 2.00→3.33, §5.2)
+  - **D 카테고리**: `reasoning_effort='low'` (avg 4.67 안정, hard_fail 0. medium은 D_02 fence 발생 §5.7)
+  - **A/B 카테고리**: `reasoning_effort='low'` (medium 점수 향상 0건, §5.7)
+  - 종합 avg 추정 **3.15** = clinical-hari와 동률, **hard_fail 0건 유지** (D=low 시)
+- **시나리오 D (역할 분리 — Formatter only)**: hari-14b-i1-chatml = A 카테고리 1위 (3.00). 단 D 모두 hard_fail이라 단일 모델 운영 후보 아님 — **role-split option으로만 유지**.
 
-### 권장 결정 (autonomous 평가 기준)
+### 권장 결정 (autonomous 평가 + R4 MF-1 검증 기준)
 
-본 평가만으로 결정한다면 **시나리오 C (gpt-oss-20b 단독 + dynamic effort)**. 이유:
-1. **hard_fail 0건** — 단일 모델 운영에서 가장 중요한 안정성 지표
+**시나리오 C (gpt-oss-20b 단독 + dynamic effort: D=low, C=medium, A/B=low)** 를 **provisional production candidate** 로 권고. 근거:
+1. **hard_fail 0건** — 단일 모델 운영에서 가장 중요한 안정성 지표 (D=low 유지 시)
 2. D avg 4.67 = clinical-hari-q5와 동률
-3. C 카테고리는 medium으로 보완 가능 (§5.2 실증)
+3. C 카테고리는 medium으로 보완 (§5.2 실증) — 단 medium 적용 범위는 C에 한정 (§5.7)
 4. 모델 로드/스왑 비용 없음
-5. clinical-hari-q5의 A_02 빈응답이 유일한 약점이지만, gpt-oss는 그런 단발 quirk 없음
+5. clinical-hari-q5는 점수상 동률이지만 task-format overlay 등 운영 패치 필요. gpt-oss는 그런 운영 overlay 없이 동등 점수
 
-단 본 평가는 32GB 환경 + 7 모델 (모두 NC 라이센스 회피)만 봤음. **64GB part 2에서 Qwen3.6-35B (gpt-oss와 동급 OpenAI 호환 + Apache 라이센스), Gemma 4 31B 추가 평가 후 최종 결정 권장**.
+→ **단 본 평가는 32GB 환경 + 7 모델만 봤음**. 최종 production 채택은 **64GB part 2에서 Qwen3.6-35B-A3B (gpt-oss와 동급 OpenAI 호환 + Apache 라이센스), Gemma 4 31B 추가 평가 후 결정**.
 
 ---
 

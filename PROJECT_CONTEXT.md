@@ -35,8 +35,9 @@
 | Step 2 `score_runner.py` 작성 (SCORING_CONTRACT.md 구현) | 완료 (R3 GO) |
 | Step 3 D smoke + Step 4 quick rerun (7 모델 × 13 prompts) | 완료, exaone4만 VRAM OOM skip |
 | 보조 실험 (chatml fallback / gpt-oss medium / D_02 retry / A_02 retry) | 완료 |
-| **R4 review (결과 해석 sign-off)** | **packet 작성됨, codex 응답 대기 중** |
-| 64GB part 2 (Qwen3.6-35B/Gemma 4 26B,31B/magistral/exaone4 split) | R4 GO 후 진입 |
+| **R4 review (결과 해석 sign-off)** | **CONDITIONAL GO** — MF-1 (gpt-oss medium A/B/D) 반영 완료 (§5.7) |
+| R4.1 — MF-1 검증 결과 codex 응답 | **대기 중** (R4.1 packet 작성 후 송부 예정) |
+| 64GB part 2 (Qwen3.6-35B/Gemma 4 26B,31B/magistral/exaone4 split) | R4.1 GO 후 진입 |
 
 ---
 
@@ -76,36 +77,47 @@
 - archive 폴더(`knowledge-archive/`) 산출물 직접 수정 (동결 스냅샷)
 - `prompts/archive/test_suite_v1.json` 사용 (v0.2로 대체됨)
 - LM Studio provider 모델 추가 (Ollama 통일 결정)
+- **gpt-oss-20b D 카테고리에 `reasoning_effort='medium'` 사용** (R4.1 §5.7 검증: medium은 D_02에서 `JSON_EXTRA_TEXT` hard_fail. medium improves C only; medium is unsafe for D JSON-only)
 
 ---
 
-## §6. 현재 production 후보 (provisional, R4 대기 중)
+## §6. 현재 production 후보 (provisional, R4 CONDITIONAL GO → MF-1 검증 완료 → R4.1 codex 응답 대기 중)
 
-**시나리오 C 추천**: `gpt-oss-20b 단독 + dynamic reasoning_effort`
-- D 카테고리: `reasoning_effort='low'` (avg 4.67, hard_fail 0)
-- A/B/C 카테고리: `reasoning_effort='medium'` (C avg 2.00→3.33 실증)
-- hard_fail 0건 + 단일 모델 운영 + 모델 swap 비용 없음
+**시나리오 C 권고**: `gpt-oss-20b 단독 + dynamic reasoning_effort` ★ provisional production candidate
+- **C 카테고리**: `reasoning_effort='medium'` (avg 2.00→3.33 실증)
+- **D 카테고리**: `reasoning_effort='low'` (avg 4.67 안정, hard_fail 0. medium은 D_02 fence hard_fail §5.7)
+- **A/B 카테고리**: `reasoning_effort='low'` (medium 점수 향상 0건, §5.7)
+- 종합 avg **3.15** (clinical-hari와 동률) + **hard_fail 0건** (D=low 유지 시)
+
+→ 최초 R4 권고였던 "A/B/C=medium" 은 §5.7 MF-1 검증에서 **"C만 medium, D/A/B=low"** 로 좁혀짐 (medium은 D에 위험).
 
 **대안**:
-- 시나리오 A (clinical-hari-q5 단독): 점수 1위(3.15)지만 A_02 단발 quirk + JSON 응답 경향 — 운영 패치 필요
-- 시나리오 D (역할 분리): hari-14b-chatml = Formatter (A 3.00 1위) + 다른 모델 조합
+- 시나리오 A (clinical-hari-q5 단독): 점수 1위(3.15)지만 A_02 retry 시 JSON 응답 경향 — task-format overlay 필요. 운영 단순성에서 시나리오 C 우위
+- 시나리오 D (역할 분리, Formatter only): hari-14b-chatml = A 1위 (3.00). 단 D 모두 HF라 단일 모델 후보 X — role-split option으로만 유지
 
 최종 결정은 **64GB part 2에서 Qwen3.6-35B-A3B 등 추가 평가 후**.
 
 ---
 
-## §7. 다음 액션 (우선순위 순)
+## §7. 다음 액션 (우선순위 순) — R4.1 GO 반영
 
 현재 작업은 두 트랙으로 분리:
 
-- [Track 1 — v0.2 Local LLM Eval Experiments](docs/experiment-track-2026-05-16.md): 지금까지의 D smoke, quick rerun, scorer, 보조 실험, R4 sign-off.
+- [Track 1 — v0.2 Local LLM Eval Experiments](docs/experiment-track-2026-05-16.md): R1~R4.1 sign-off 완료, scorer/D smoke/quick rerun/MF-1 verification 모두 닫음.
 - [Track 2 — Local LLM Upgrade Plan](docs/local-llm-upgrade-plan.md): Qwen3.6 preview, q8 KV cache, 64GB/128GB, retrieval/memory 확장.
 
-1. **R4 codex review 진행** — packet + report.md만 먼저 전달. 응답 기다림.
-2. **R4 응답이 GO이면**: gpt-oss medium A/B/D 검증 (현재 C만 측정됨) → 64GB part 2 진입 준비
-3. **R4 응답이 CONDITIONAL GO이면**: Q4의 추가 검증 항목 수행 → R4.1
-4. **64GB part 2**: Qwen3.6-35B-A3B (1순위, Apache + a3b MoE) / Gemma 4 26B,31B / magistral 재시도 / exaone4 GPU+CPU split
-5. v0.3 정정 (must-fix 후보): D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 — SCORING_CONTRACT.md §13 참조
+**Track 1 마무리 상태**: R4 CONDITIONAL GO → MF-1 (gpt-oss medium A/B/D) 반영 → **R4.1 GO** (codex sign-off 2026-05-16).
+
+다음 액션:
+
+1. **64GB part 2 준비**: 진입 전 점검 — `models_config_part2.json` 갱신 (Qwen3.6-35B-A3B 1순위 / Gemma 4 26B,31B / magistral 재시도 / exaone4 GPU+CPU split policy)
+2. **(선택) Qwen3.6-35B-A3B 32GB preview**: MoE active-3B 특성상 32GB에서 가능성 있음. `part2_preflight` 라벨로 별도 실행
+3. **(선택) q8 KV cache 정책 테스트**: `OLLAMA_KV_CACHE_TYPE=q8_0` 환경변수로 별도 round. baseline과 분리 라벨링 필수 (Track 2 §3)
+4. **(선택) gpt-oss high 1~2 prompt 실험**: medium보다 더 좋아지는지 / 속도 trade-off
+5. **(선택) ministral V7 template Modelfile 재시도**: D_02 1 token EOT 진단
+6. **v0.3 정정 (must-fix 후보)**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의 — SCORING_CONTRACT.md §13 참조
+
+→ 1번이 우선. 2~5는 64GB 진입 전 시간 여유에 따라 선택.
 
 ---
 

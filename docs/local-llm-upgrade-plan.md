@@ -1,7 +1,7 @@
 # Track 2 — Local LLM Upgrade Plan
 
 > Purpose: separate forward-looking local LLM infrastructure plan from the completed v0.2 experiment track.
-> Last updated: 2026-05-16.
+> Last updated: 2026-05-17.
 
 ---
 
@@ -126,8 +126,8 @@ Status: completed as `part2_preflight_32gb_defaultkv_thinking_off`.
 - D smoke: avg **4.67**, hard_fail **0**.
 - Full v0.2 13 prompts: avg **3.31**, hard_fail **0**.
 - v0.3 rescore of the same raw full run: avg **3.38**, hard_fail **0**; D_json_phi becomes **5.00** after the D_01 false-positive forbidden fix.
-- Category scores: A 2.50 / B 3.33 / C 3.00 / D 4.67.
-- Interpretation: strong automation-safety signal and better total avg than `gpt-oss-20b` dynamic effort (3.15 HF0), but A abbreviation preservation and B_01 exact/name mismatch wording still need review. Treat as **64GB part 2 priority 1 challenger**, not silent replacement for the completed baseline.
+- v0.3 category scores: A 2.50 / B 3.33 / C 3.00 / D 5.00.
+- Interpretation: strong automation-safety signal and slightly better total avg than the v0.3-rescored `gpt-oss-20b` dynamic effort (3.38 vs 3.31, both HF0). A abbreviation preservation and B_01 exact/name mismatch wording still need review, so treat Qwen as **64GB part 2 priority 1 challenger**, not silent replacement for the completed baseline.
 
 Tracked report: `reviews/qwen35b-preview-32gb-2026-05-16-report.md`.
 
@@ -161,6 +161,10 @@ R4 MF-1 verification (`reviews/quick-rerun-2026-05-16-report.md §5.7`) collapse
 
 Scenario C composite under the pinned policy:
 `(A:2.50x4 + B:2.33x3 + C:3.33x3 + D:4.67x3) / 13 = 3.15`, hard_fail 0.
+
+v0.3 raw rescore of the same existing responses:
+`(A:2.75x4 + B:2.33x3 + C:3.33x3 + D:5.00x3) / 13 = 3.31`, hard_fail 0.
+This is the apples-to-apples comparator for Qwen v0.3 (3.38 HF0).
 
 ### Open follow-ups (selective, post-64GB OK)
 
@@ -284,6 +288,7 @@ Reason:
 | R4 sign-off | high | completed | R4.1 GO, Track 1 closed |
 | gpt-oss medium A/B/D | high | completed | dynamic effort pinned: A/B/D low, C medium |
 | Qwen3.6-35B-A3B 32GB preview | high | completed | avg 3.31 / hard_fail 0 on v0.2; v0.3 rescore avg 3.38 / hard_fail 0 |
+| Track 1 v0.3 raw rescore | high | completed | gpt-oss dynamic avg 3.31 / hard_fail 0; Qwen v0.3 edge narrows to +0.08 |
 | q8 KV policy | medium | documented here | test in separate round, do not mix with f16 baseline |
 | v0.3 scoring cleanup | high | completed | use `prompts/test_suite_v0.3.json` for new runs |
 | HARI ChatML | medium | proven useful for A | make ChatML the default HARI path |

@@ -1,7 +1,7 @@
 # Project Context — Local LLM Eval
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
-> 마지막 갱신: 2026-05-17 (v0.3 scoring/prompt 정정 완료 + Qwen3.6 v0.3 rescore)
+> 마지막 갱신: 2026-05-17 (v0.3 scoring/prompt 정정 완료 + Track 1 v0.3 raw rescore)
 
 ---
 
@@ -40,6 +40,7 @@
 | **64GB part 2 config skeleton** (Qwen3.6-35B / Gemma 4 26B,31B / magistral / exaone4 split) | **갱신 완료 (2026-05-16)** — Ollama provider 통일. Qwen3.6은 `qwen3.6:35b-a3b` pull 완료, 나머지는 ollama_name/import 실측 대기 |
 | **Qwen3.6-35B-A3B 32GB preview** | **완료 (2026-05-16, part2_preflight default KV / thinking-off)** — D smoke 4.67 HF0, full 13 avg 3.31 HF0 |
 | **v0.3 scoring/prompt 정정** | **완료 (2026-05-17)** — D_01 forbidden false-positive / A_04 marker / sentence tolerance ±2 / format-only score=4 반영. Qwen raw v0.3 rescore: avg 3.38 HF0 |
+| **Track 1 v0.3 raw rescore 비교** | **완료 (2026-05-17)** — quick_rerun 7 + gpt-oss medium C/ABD + HARI ChatML 기존 raw 재채점. gpt-oss dynamic v0.3 **3.31 HF0**, Qwen v0.3 **3.38 HF0** |
 
 ---
 
@@ -90,9 +91,10 @@
 
 **시나리오 C 권고**: `gpt-oss-20b 단독 + dynamic reasoning_effort` ★ provisional production candidate
 - **C 카테고리**: `reasoning_effort='medium'` (avg 2.00→3.33 실증)
-- **D 카테고리**: `reasoning_effort='low'` (avg 4.67 안정, hard_fail 0. medium은 D_02 fence hard_fail §5.7)
+- **D 카테고리**: `reasoning_effort='low'` (v0.2 avg 4.67, v0.3 raw rescore 5.00, hard_fail 0. medium은 D_02 fence hard_fail §5.7)
 - **A/B 카테고리**: `reasoning_effort='low'` (medium 점수 향상 0건, §5.7)
-- 종합 avg **3.15** (clinical-hari와 동률) + **hard_fail 0건** (D=low 유지 시)
+- v0.2 종합 avg **3.15** (clinical-hari와 동률) + **hard_fail 0건** (D=low 유지 시)
+- v0.3 raw rescore 종합 avg **3.31 / hard_fail 0** (A 2.75 / B 2.33 / C 3.33 / D 5.00). Qwen 비교는 이 값을 기준으로 보는 것이 apples-to-apples.
 
 → 최초 R4 권고였던 "A/B/C=medium" 은 §5.7 MF-1 검증에서 **"C만 medium, D/A/B=low"** 로 좁혀짐 (medium은 D에 위험).
 
@@ -105,7 +107,7 @@
 **신규 challenger (32GB preview)**:
 - `qwen3.6:35b-a3b` + `reasoning_effort='none'` (`thinking-off`, default KV, `part2_preflight`)
 - full 13 prompts: v0.2 score **avg 3.31 / hard_fail 0**, v0.3 rescore **avg 3.38 / hard_fail 0**. D JSON+PHI는 v0.3 기준 **5.00 / hard_fail 0**, PHI stress 통과.
-- gpt-oss dynamic(3.15 HF0)보다 avg는 높지만, A 약어 보존과 B_01 exact/name mismatch 설명에서 required 누락이 있어 **즉시 production 교체가 아니라 64GB part 2 priority 1 challenger** 로 유지.
+- gpt-oss dynamic v0.3(3.31 HF0)보다 avg는 높지만 격차는 **+0.08**로 축소됨. A 약어 보존과 B_01 exact/name mismatch 설명에서 required 누락이 있어 **즉시 production 교체가 아니라 64GB part 2 priority 1 challenger** 로 유지.
 - 자세한 해석: [reviews/qwen35b-preview-32gb-2026-05-16-report.md](reviews/qwen35b-preview-32gb-2026-05-16-report.md)
 
 ---
@@ -127,6 +129,7 @@
 4. **(선택) gpt-oss high 1~2 prompt 실험**: medium보다 더 좋아지는지 / 속도 trade-off
 5. **(선택) ministral V7 template Modelfile 재시도**: D_02 1 token EOT 진단
 6. ~~**v0.3 정정**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의~~ → **완료 (2026-05-17)**. `SCORING_CONTRACT.md`, `score_runner.py`, `prompts/test_suite_v0.3*.json`, regression test 반영.
+7. ~~**Track 1 v0.3 raw rescore**~~ → **완료 (2026-05-17)**. 기존 raw만 재채점: quick_rerun 7, gpt-oss medium C/ABD, HARI ChatML. gpt-oss dynamic 3.31 HF0, Qwen 3.38 HF0.
 
 → 다음 우선: 3번(q8 KV runtime matrix, 비교 목적) 또는 4번(gpt-oss high 1~2 prompt). 64GB 업그레이드 후에는 v0.3 기준 Qwen thinking-on/off 재측정 + Gemma 4 26B/31B 진입.
 

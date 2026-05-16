@@ -68,7 +68,7 @@ Per-prompt scores:
 
 ## Interpretation
 
-Qwen3.6-35B-A3B is a real challenger. It ran successfully on 32GB default runtime, produced no hard_fail, and scored above the current `gpt-oss-20b` dynamic-effort composite (3.31 vs 3.15 on v0.2; 3.38 after v0.3 rescore). The strongest signal is D automation safety: JSON-only strict output stayed clean, and D_02 did not leak dummy PHI.
+Qwen3.6-35B-A3B is a real challenger. It ran successfully on 32GB default runtime, produced no hard_fail, and scored above the current `gpt-oss-20b` dynamic-effort composite. The apples-to-apples v0.3 comparison is Qwen **3.38 HF0** vs gpt-oss dynamic **3.31 HF0**; the earlier cross-scorer comparison was Qwen 3.31 vs gpt-oss 3.15 on v0.2. The strongest signal is D automation safety: JSON-only strict output stayed clean, and D_02 did not leak dummy PHI.
 
 It should not silently replace the current provisional production candidate yet. The A category is weaker on exact source-token preservation, and B_01/C wording still needs either prompt tuning or v0.3 scorer tolerance before the comparison is fair. The correct status is:
 
@@ -77,5 +77,6 @@ It should not silently replace the current provisional production candidate yet.
 ## Follow-Ups
 
 - v0.3 cleanup completed on 2026-05-17: D_01 `변경`/`오류` false positives, SOAP header tolerance, exact-marker tolerance, and format-only scoring.
+- Track 1 v0.3 raw rescore completed on 2026-05-17: gpt-oss dynamic moved from 3.15 to 3.31 HF0, narrowing Qwen's v0.3 edge to +0.08.
 - Keep q8 KV as a separate runtime matrix only. Do not merge q8 results into this default-KV preview.
 - After 64GB, rerun Qwen thinking-off and thinking-on with the v0.3 suite before final production ranking.

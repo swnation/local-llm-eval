@@ -20,7 +20,7 @@ import urllib.error
 # --- 설정 (필요 시 수정) ---
 LM_STUDIO_URL = "http://localhost:1234/v1"
 OLLAMA_URL = "http://localhost:11434/v1"
-PROMPTS_FILE = "prompts/test_suite_v0.2.json"
+PROMPTS_FILE = "prompts/test_suite_v0.3.json"
 RESULTS_DIR = "results"
 TIMEOUT_SEC = 600  # 큰 모델은 첫 응답 오래 걸릴 수 있음
 

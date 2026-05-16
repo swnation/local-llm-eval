@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-score_runner.py — Local LLM Eval v0.2 자동 채점 스크립트.
+score_runner.py — Local LLM Eval v0.3 자동 채점 스크립트.
 
 SCORING_CONTRACT.md 의 spec 그대로 구현:
 - 5단계 우선순위 (hard_fail → forbidden → required → format → score)
@@ -9,7 +9,7 @@ SCORING_CONTRACT.md 의 spec 그대로 구현:
 - NB-3: A 카테고리 MIXED_LANGUAGE 자동 적용 X (language_policy 기반)
 
 사용법:
-    python score_runner.py --prompts prompts/test_suite_v0.2.json \\
+    python score_runner.py --prompts prompts/test_suite_v0.3.json \\
                            --results-glob "results/*_20260516_*.json" \\
                            --output results/_scored_quick_rerun_<ts>
 
@@ -334,24 +334,44 @@ def check_format(response, rubric, category_meta):
     # sentence count
     min_s = fmt.get("min_sentences")
     max_s = fmt.get("max_sentences")
+    tolerance = int(fmt.get("sentence_tolerance", 2))
     if min_s is not None or max_s is not None:
         n = sentence_count(response or "")
-        if max_s is not None and n > max_s + 1:  # tolerance +1
+        if max_s is not None and n > max_s + tolerance:
             issues.append(f"TOO_VERBOSE: {n} sentences > max {max_s}")
             tags.append("TOO_VERBOSE")
             tags.append("FORMAT_FAIL")
-        if min_s is not None and n < min_s - 1:  # tolerance -1
+        if min_s is not None and n < min_s - tolerance:
             issues.append(f"TOO_TERSE: {n} sentences < min {min_s}")
             tags.append("TOO_TERSE")
             tags.append("FORMAT_FAIL")
+
+    # required marker (v0.3): supports either {"text": "...", "min_count": 1}
+    # or legacy natural-language strings such as "[확인 필요] 1회 이상".
+    marker_spec = fmt.get("required_marker")
+    if marker_spec:
+        marker = None
+        min_count = 1
+        if isinstance(marker_spec, dict):
+            marker = marker_spec.get("text")
+            min_count = int(marker_spec.get("min_count", 1))
+        elif isinstance(marker_spec, str):
+            bracketed = re.search(r"(\[[^\]]+\])", marker_spec)
+            marker = bracketed.group(1) if bracketed else marker_spec.split()[0]
+        if marker:
+            count = (response or "").count(marker)
+            if count < min_count:
+                issues.append(f"FORMAT_FAIL: required_marker '{marker}' count {count} < {min_count}")
+                tags.append("FORMAT_FAIL")
+                tags.append("MISSING_REQUIRED_ELEMENT")
 
     # structure (간단 검사)
     structure = fmt.get("structure", "")
     if structure in ("S/O/A_3sections", "S/O/A_or_subjective_objective_assessment"):
         # 헤더 3개 확인
-        has_s = element_present(response, {"any_of": ["S:", "주관:"]})
-        has_o = element_present(response, {"any_of": ["O:", "객관:"]})
-        has_a = element_present(response, {"any_of": ["A:", "평가:"]})
+        has_s = element_present(response, {"any_of": ["S:", "S(", "S ", "주관:"]})
+        has_o = element_present(response, {"any_of": ["O:", "O(", "O ", "객관:"]})
+        has_a = element_present(response, {"any_of": ["A:", "A(", "A ", "평가:"]})
         if not (has_s and has_o and has_a):
             issues.append(f"FORMAT_FAIL: SOAP headers missing (S={has_s} O={has_o} A={has_a})")
             tags.append("FORMAT_FAIL")
@@ -414,7 +434,7 @@ def check_hard_fail(response, rubric, prompt, json_strict_result):
 def compute_score(hard_fail: bool, required_missing_count: int,
                   forbidden_present_count: int, format_pass: bool) -> int:
     """
-    SCORING_CONTRACT §10 — R3 must-fix 반영된 분기 순서:
+    SCORING_CONTRACT §10 — v0.3 분기 순서:
     0 → 2 → 5 → 4 → 3 → 1
     """
     if hard_fail:
@@ -425,8 +445,8 @@ def compute_score(hard_fail: bool, required_missing_count: int,
     # 5: required 모두 + forbidden 0 + format 완전
     if required_missing_count == 0 and forbidden_present_count == 0 and format_pass:
         return 5
-    # 4: required 모두 + minor forbidden 1~2 + format 완전
-    if required_missing_count == 0 and forbidden_present_count <= 2 and format_pass:
+    # 4: required 모두 + minor forbidden 1~2, 또는 format-only/minor-format fail
+    if required_missing_count == 0 and forbidden_present_count <= 2:
         return 4
     # 3: 경계
     if required_missing_count <= 2 and forbidden_present_count <= 2:
@@ -436,7 +456,7 @@ def compute_score(hard_fail: bool, required_missing_count: int,
 
 def score_one(test, response_record, prompts_meta):
     """
-    test: prompt object from test_suite_v0.2.json
+    test: prompt object from test_suite_v0.3.json
     response_record: tests[i] from results/<model>_<ts>.json (success/response/elapsed_sec/tok_per_sec)
     prompts_meta: top-level prompts_data (for category_meta access)
     Returns dict with all checks + score + tags.
@@ -547,7 +567,7 @@ def score_one(test, response_record, prompts_meta):
 def score_run(eval_run, prompts_data):
     """
     eval_run: results/<model>_<ts>.json content (dict with tests[] list)
-    prompts_data: prompts/test_suite_v0.2.json content
+    prompts_data: prompts/test_suite_v0.3.json content
     """
     test_lookup = {t["id"]: t for t in prompts_data.get("tests", [])}
     model_label = eval_run.get("model_label", "?")
@@ -559,7 +579,7 @@ def score_run(eval_run, prompts_data):
             scored.append({
                 "prompt_id": tid,
                 "score": None,
-                "error": f"prompt {tid} not in v0.2 test_suite",
+                "error": f"prompt {tid} not in active test_suite",
             })
             continue
         if not rec.get("success", False):
@@ -594,17 +614,18 @@ def write_outputs(all_scored, out_path_prefix, prompts_data):
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump({
-            "schema_version": "v0.2-scorer-v1",
-            "scoring_contract": "SCORING_CONTRACT.md (R3 sign-off)",
+            "schema_version": "v0.3-scorer-v1",
+            "scoring_contract": "SCORING_CONTRACT.md (v0.3)",
             "models": all_scored,
         }, f, ensure_ascii=False, indent=2)
 
     # Markdown
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(f"# Scored Results — v0.2 quick rerun\n\n")
+        prompts_version = prompts_data.get("version", "unknown")
+        f.write(f"# Scored Results — v{prompts_version}\n\n")
         f.write(f"- 채점 시각: {datetime.now().isoformat()}\n")
         f.write(f"- 모델 수: {len(all_scored)}\n")
-        f.write(f"- 채점 규칙: SCORING_CONTRACT.md (R3 sign-off)\n\n")
+        f.write(f"- 채점 규칙: SCORING_CONTRACT.md (v0.3)\n\n")
 
         # Summary table
         f.write("## Summary — 모델별 카테고리 점수\n\n")
@@ -703,9 +724,9 @@ def write_outputs(all_scored, out_path_prefix, prompts_data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Local LLM Eval v0.2 자동 채점")
-    parser.add_argument("--prompts", default="prompts/test_suite_v0.2.json",
-                        help="prompt set JSON (default: prompts/test_suite_v0.2.json)")
+    parser = argparse.ArgumentParser(description="Local LLM Eval v0.3 자동 채점")
+    parser.add_argument("--prompts", default="prompts/test_suite_v0.3.json",
+                        help="prompt set JSON (default: prompts/test_suite_v0.3.json)")
     parser.add_argument("--results-glob", required=True,
                         help="glob pattern for results JSON files (e.g., 'results/*_20260516_*.json')")
     parser.add_argument("--output", required=True,

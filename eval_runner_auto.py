@@ -25,10 +25,14 @@ from datetime import datetime
 import urllib.request
 import urllib.error
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # --- 설정 ---
 LM_STUDIO_URL = "http://localhost:1234/v1"
 OLLAMA_URL = "http://localhost:11434/v1"
-DEFAULT_PROMPTS_FILE = "prompts/test_suite_v0.2.json"
+DEFAULT_PROMPTS_FILE = "prompts/test_suite_v0.3.json"
 DEFAULT_MODELS_CONFIG = "models_config.json"
 RESULTS_DIR = "results"
 TIMEOUT_SEC = 600
@@ -415,18 +419,22 @@ def main():
         print(f"오류: {args.prompts} 파일이 없습니다.")
         sys.exit(1)
 
-    print("[사전 점검] lms CLI 확인...")
-    code, out, err = run_lms(["status"], timeout=10)
-    if code != 0:
-        print(f"  ✗ lms 명령 실패: {err.strip()}")
-        print("    → 'lms bootstrap' 실행 후 새 터미널에서 재시도.")
-        sys.exit(1)
-    print(f"  ✓ lms OK")
-
     config = load_json(args.config)
     prompts_data = load_json(args.prompts)
 
     models = config["models"]
+    needs_lm_studio = any(m.get("provider", "lm_studio") == "lm_studio" for m in models)
+    if needs_lm_studio:
+        print("[사전 점검] lms CLI 확인...")
+        code, out, err = run_lms(["status"], timeout=10)
+        if code != 0:
+            print(f"  ✗ lms 명령 실패: {err.strip()}")
+            print("    → 'lms bootstrap' 실행 후 새 터미널에서 재시도.")
+            sys.exit(1)
+        print(f"  ✓ lms OK")
+    else:
+        print("[사전 점검] all-Ollama config — lms CLI 확인 생략")
+
     print(f"\n평가 대상: {len(models)}개 모델 × {len(prompts_data['tests'])}개 프롬프트 = {len(models) * len(prompts_data['tests'])}회 호출")
     for i, m in enumerate(models, 1):
         print(f"  {i:2d}. {m['label']} ({m.get('provider', 'lm_studio')})")

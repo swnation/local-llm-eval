@@ -37,8 +37,10 @@ local-llm-eval/
 ├── models_config_remaining.json                           ← 잔여 미평가 모델
 ├── models_config_quick_rerun.json                         ← v0.2 quick rerun 7개 모델 ★
 ├── prompts/
-│   ├── test_suite_v0.2.json                               ← v0.2 final 운영본 (13 prompts + 4층 rubric)
+│   ├── test_suite_v0.3.json                               ← v0.3 운영본 (13 prompts + §13 정정)
+│   ├── test_suite_v0.2.json                               ← v0.2 final 보존본 (quick_rerun baseline)
 │   ├── local-llm-eval-prompts-clinical-assist-v0.1.md     ← v0.1 초안 (히스토리)
+│   ├── local-llm-eval-prompts-clinical-assist-v0.3.md     ← v0.3 delta 문서
 │   ├── local-llm-eval-prompts-clinical-assist-v0.2.md     ← v0.2 final 문서 정본 (사람이 읽는 형식)
 │   └── archive/
 │       └── test_suite_v1.json                             ← 구 v1 prompts (21개, 보관용)
@@ -247,17 +249,20 @@ lms load --estimate-only mistralai/ministral-3-14b-reasoning --gpu max --context
 ### 8.1 자동 모드 (권장)
 
 ```powershell
-# v0.2 quick rerun (오늘 밤): 7개 모델 × 13 prompt
+# v0.3 current run: 7개 모델 × 13 prompt
 python eval_runner_auto.py --config models_config_quick_rerun.json
 
-# (옛) 32GB part1: 10 모델 × 21 prompt — v1 시절 도구. v0.2 prompts와 호환됨 (prompts file은 default가 v0.2로 변경됨)
+# v0.2 baseline 재현이 필요할 때
+python eval_runner_auto.py --config models_config_quick_rerun.json --prompts prompts/test_suite_v0.2.json
+
+# (옛) 32GB part1: 10 모델 × 21 prompt — v1 시절 도구. 신규 기본 prompts는 v0.3
 python eval_runner_auto.py --config models_config_part1.json
 
 # 64GB 업그레이드 후: part2
 python eval_runner_auto.py --config models_config_part2.json
 ```
 
-기본값(`--config` 생략 시)은 `models_config.json` (전체 14개). 기본 prompts는 `prompts/test_suite_v0.2.json` (v0.2 final).
+기본값(`--config` 생략 시)은 `models_config.json` (전체 14개). 기본 prompts는 `prompts/test_suite_v0.3.json` (v0.3 운영본). v0.2 quick_rerun baseline 재현이 필요하면 `--prompts prompts/test_suite_v0.2.json` 를 명시.
 
 ### 8.2 동작 흐름
 
@@ -362,7 +367,7 @@ python eval_runner.py --ollama    # Ollama (port 11434)
 
 ## §12. Prompt 커스터마이징
 
-`prompts/test_suite_v0.2.json` 의 `tests[]` 직접 편집. 각 prompt 객체 키:
+신규 평가는 `prompts/test_suite_v0.3.json` 의 `tests[]` 를 기준으로 한다. v0.2 baseline은 보존본이므로 직접 편집하지 않는다. 각 prompt 객체 키:
 
 ```json
 {
@@ -389,7 +394,7 @@ python eval_runner.py --ollama    # Ollama (port 11434)
 }
 ```
 
-자세한 schema는 `prompts/local-llm-eval-prompts-clinical-assist-v0.2.md` (문서 정본) 참조.
+자세한 schema는 `prompts/local-llm-eval-prompts-clinical-assist-v0.3.md` 와 `SCORING_CONTRACT.md` 참조. v0.2 전체 prose 정본은 historical context로 보존.
 
 ---
 

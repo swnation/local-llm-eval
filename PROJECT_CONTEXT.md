@@ -1,7 +1,7 @@
 # Project Context — Local LLM Eval
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
-> 마지막 갱신: 2026-05-16 (R3 sign-off + Step 4 quick rerun 완료, R4 review 대기 중)
+> 마지막 갱신: 2026-05-17 (v0.3 scoring/prompt 정정 완료 + Qwen3.6 v0.3 rescore)
 
 ---
 
@@ -26,7 +26,7 @@
 
 ---
 
-## §3. 현재 상태 (2026-05-16 기준)
+## §3. 현재 상태 (2026-05-17 기준)
 
 | 단계 | 상태 |
 |---|---|
@@ -35,23 +35,28 @@
 | Step 2 `score_runner.py` 작성 (SCORING_CONTRACT.md 구현) | 완료 (R3 GO) |
 | Step 3 D smoke + Step 4 quick rerun (7 모델 × 13 prompts) | 완료, exaone4만 VRAM OOM skip |
 | 보조 실험 (chatml fallback / gpt-oss medium / D_02 retry / A_02 retry) | 완료 |
-| **R4 review (결과 해석 sign-off)** | **CONDITIONAL GO** — MF-1 (gpt-oss medium A/B/D) 반영 완료 (§5.7) |
-| R4.1 — MF-1 검증 결과 codex 응답 | **대기 중** (R4.1 packet 작성 후 송부 예정) |
-| 64GB part 2 (Qwen3.6-35B/Gemma 4 26B,31B/magistral/exaone4 split) | R4.1 GO 후 진입 |
+| R4 review (결과 해석 sign-off) | 완료 — MF-1 (gpt-oss medium A/B/D) 반영 (§5.7) |
+| R4.1 — MF-1 검증 codex sign-off | **GO** (2026-05-16, Track 1 closed) |
+| **64GB part 2 config skeleton** (Qwen3.6-35B / Gemma 4 26B,31B / magistral / exaone4 split) | **갱신 완료 (2026-05-16)** — Ollama provider 통일. Qwen3.6은 `qwen3.6:35b-a3b` pull 완료, 나머지는 ollama_name/import 실측 대기 |
+| **Qwen3.6-35B-A3B 32GB preview** | **완료 (2026-05-16, part2_preflight default KV / thinking-off)** — D smoke 4.67 HF0, full 13 avg 3.31 HF0 |
+| **v0.3 scoring/prompt 정정** | **완료 (2026-05-17)** — D_01 forbidden false-positive / A_04 marker / sentence tolerance ±2 / format-only score=4 반영. Qwen raw v0.3 rescore: avg 3.38 HF0 |
 
 ---
 
 ## §4. 핵심 결정 (R1~R3 누적)
 
-### §4.1 평가셋 구조 (v0.2 final, R1 GO)
+### §4.1 평가셋 구조 (v0.3 current / v0.2 baseline 보존)
 - A 차팅 정리 4 / B NEEDS_REVIEW 설명 3 / C rule finding 문장화 3 / D JSON+PHI 3 = **13개**
 - 4층 rubric: `required_elements` / `forbidden_elements` / `format_requirements` / `hard_fail`
 - 평가 태그 **15종** (자동/수동 분리)
+- 현재 신규 실행 기본 prompt: `prompts/test_suite_v0.3.json`
+- v0.2 quick rerun baseline은 `prompts/test_suite_v0.2.json` 에 보존. v0.2/v0.3 결과 비교 시 prompt version label 필수.
 
-### §4.2 scorer contract (R2 + R3 sign-off)
+### §4.2 scorer contract (R2/R3 sign-off + v0.3 정정)
 - 5단계 검사 우선순위: `hard_fail → forbidden → required → format → score`
 - D 카테고리는 `required_layer: "json_schema"` 로 `required_elements` 대체
 - 점수 분기 순서: `0 → 2 → 5 → 4 → 3 → 1` (R3 must-fix 반영)
+- v0.3 정정: format-only fail은 4점 / sentence tolerance 기본 ±2 / A_04 `required_marker` 구조화 / D_01 `"변경"` 단순 명사 false-positive 제거
 - 정확한 spec: [SCORING_CONTRACT.md](SCORING_CONTRACT.md)
 
 ### §4.3 NB-3 (R1 비차단 의견, scorer 처리)
@@ -81,7 +86,7 @@
 
 ---
 
-## §6. 현재 production 후보 (provisional, R4 CONDITIONAL GO → MF-1 검증 완료 → R4.1 codex 응답 대기 중)
+## §6. 현재 production 후보 (provisional, R4.1 GO 이후)
 
 **시나리오 C 권고**: `gpt-oss-20b 단독 + dynamic reasoning_effort` ★ provisional production candidate
 - **C 카테고리**: `reasoning_effort='medium'` (avg 2.00→3.33 실증)
@@ -97,6 +102,12 @@
 
 최종 결정은 **64GB part 2에서 Qwen3.6-35B-A3B 등 추가 평가 후**.
 
+**신규 challenger (32GB preview)**:
+- `qwen3.6:35b-a3b` + `reasoning_effort='none'` (`thinking-off`, default KV, `part2_preflight`)
+- full 13 prompts: v0.2 score **avg 3.31 / hard_fail 0**, v0.3 rescore **avg 3.38 / hard_fail 0**. D JSON+PHI는 v0.3 기준 **5.00 / hard_fail 0**, PHI stress 통과.
+- gpt-oss dynamic(3.15 HF0)보다 avg는 높지만, A 약어 보존과 B_01 exact/name mismatch 설명에서 required 누락이 있어 **즉시 production 교체가 아니라 64GB part 2 priority 1 challenger** 로 유지.
+- 자세한 해석: [reviews/qwen35b-preview-32gb-2026-05-16-report.md](reviews/qwen35b-preview-32gb-2026-05-16-report.md)
+
 ---
 
 ## §7. 다음 액션 (우선순위 순) — R4.1 GO 반영
@@ -110,14 +121,14 @@
 
 다음 액션:
 
-1. **64GB part 2 준비**: 진입 전 점검 — `models_config_part2.json` 갱신 (Qwen3.6-35B-A3B 1순위 / Gemma 4 26B,31B / magistral 재시도 / exaone4 GPU+CPU split policy)
-2. **(선택) Qwen3.6-35B-A3B 32GB preview**: MoE active-3B 특성상 32GB에서 가능성 있음. `part2_preflight` 라벨로 별도 실행
-3. **(선택) q8 KV cache 정책 테스트**: `OLLAMA_KV_CACHE_TYPE=q8_0` 환경변수로 별도 round. baseline과 분리 라벨링 필수 (Track 2 §3)
+1. ~~**64GB part 2 준비**: `models_config_part2.json` 갱신~~ → **완료 (2026-05-16)**. ollama provider 통일 / Qwen3.6-35B-A3B PRIORITY 1 / Gemma 4 26B,31B / magistral retry / exaone4 split policy 반영. 잔여 작업: Gemma/magistral/exaone4 ollama_name 실측/import.
+2. ~~**Qwen3.6-35B-A3B 32GB preview**~~ → **완료 (2026-05-16)**. `qwen3.6:35b-a3b`, default KV, `reasoning_effort='none'`, D smoke 후 full 13 실행. avg 3.31 / hard_fail 0.
+3. **(선택) q8 KV cache 정책 테스트**: `OLLAMA_KV_CACHE_TYPE=q8_0` 환경변수로 별도 round. baseline과 분리 라벨링 필수 (Track 2 §3). Qwen default-KV preview가 이미 통과했으므로 q8은 품질/메모리 비교 목적일 때만.
 4. **(선택) gpt-oss high 1~2 prompt 실험**: medium보다 더 좋아지는지 / 속도 trade-off
 5. **(선택) ministral V7 template Modelfile 재시도**: D_02 1 token EOT 진단
-6. **v0.3 정정 (must-fix 후보)**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의 — SCORING_CONTRACT.md §13 참조
+6. ~~**v0.3 정정**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의~~ → **완료 (2026-05-17)**. `SCORING_CONTRACT.md`, `score_runner.py`, `prompts/test_suite_v0.3*.json`, regression test 반영.
 
-→ 1번이 우선. 2~5는 64GB 진입 전 시간 여유에 따라 선택.
+→ 다음 우선: 3번(q8 KV runtime matrix, 비교 목적) 또는 4번(gpt-oss high 1~2 prompt). 64GB 업그레이드 후에는 v0.3 기준 Qwen thinking-on/off 재측정 + Gemma 4 26B/31B 진입.
 
 ---
 
@@ -125,8 +136,9 @@
 
 ### Spec / 운영 기준
 - [README.md](README.md) — 폴더 진입점 + 실행 가이드
-- [SCORING_CONTRACT.md](SCORING_CONTRACT.md) — scorer 행동 정확 명세 (R3 sign-off)
-- [prompts/test_suite_v0.2.json](prompts/test_suite_v0.2.json) — v0.2 final 13 prompts (운영본)
+- [SCORING_CONTRACT.md](SCORING_CONTRACT.md) — scorer 행동 정확 명세 (v0.3 current)
+- [prompts/test_suite_v0.3.json](prompts/test_suite_v0.3.json) — v0.3 current 13 prompts (운영본)
+- [prompts/test_suite_v0.2.json](prompts/test_suite_v0.2.json) — v0.2 final 13 prompts (baseline 보존본)
 - [prompts/local-llm-eval-prompts-clinical-assist-v0.2.md](prompts/local-llm-eval-prompts-clinical-assist-v0.2.md) — 문서 정본
 
 ### 도구

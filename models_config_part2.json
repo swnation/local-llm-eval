@@ -1,57 +1,86 @@
 {
-  "_comment": "64GB RAM 업그레이드 완료 후 실행할 무거운 4개 모델. part1과 동일한 21개 프롬프트로 평가.",
-
-  "_expected_runtime": "약 75~110분",
-  "_total_calls": "4 모델 × 21 프롬프트 = 84회 호출",
-  "_prerequisite": "64GB RAM 업그레이드 필수. 32GB 환경에서는 OOM 위험 큼.",
+  "_comment": "Track 2 part 2 — 64GB RAM upgrade 후 실행할 큰 모델군. PROJECT_CONTEXT §5에 따라 Ollama provider 통일. v0.3 final 13 prompts 적용. v0.2 quick_rerun과 비교 시 prompt version label 필수.",
+  "_eval_set": "prompts/test_suite_v0.3.json",
+  "_eval_set_count": 13,
+  "_total_calls": "6 모델 × 13 prompts = 78회 호출 (모델 skip 시 변동)",
+  "_expected_runtime": "약 90~150분 (35B/31B 응답 시간 큼)",
+  "_prerequisite": [
+    "64GB RAM upgrade 완료 (32GB에서는 qwen3.6-35b-a3b-thinking-off만 MoE active-3B로 part2_preflight 가능 — Track 2 §4)",
+    "각 모델 사전 import: ollama pull <name>  또는  ollama-imports/import.ps1 + Modelfile.<name> (hari/ministral pattern 동일)",
+    "exaone4-32b는 GPU+CPU split 필요 — num_gpu 옵션을 실측 후 결정하고 별도 round로 분리"
+  ],
+  "_runtime_baseline": "f16 default KV (quick_rerun과 동일). q8 KV는 별도 round로 분리하고 label suffix _q8kv 필수 (Track 2 §3).",
+  "_label_convention": "결과 파일: _scored_part2_64gb_<model>_<YYYYMMDD>.json (Track 2 §11)",
+  "_change_log": [
+    "2026-05-16: lm_studio provider → ollama 전환 (§5 통일 결정 반영). nemotron 제거. Gemma 4 26B / magistral retry / exaone4 split 추가.",
+    "2026-05-17: eval set default를 v0.3으로 전환. v0.2 quick_rerun과 비교 시 prompt version label 필수."
+  ],
 
   "models": [
     {
       "label": "qwen3.6-35b-a3b-thinking-off",
-      "provider": "lm_studio",
-      "lms_key": "qwen/qwen3.6-35b-a3b",
-      "_role": "MAIN — rule classification 도전자",
-      "load_options": {
-        "gpu": "max",
-        "context_length": 8192
-      },
+      "provider": "ollama",
+      "ollama_name": "qwen3.6:35b-a3b",
+      "_status": "local_pull_complete_2026-05-16_preview_32gb_thinking_off_ran",
+      "_role": "★ PRIORITY 1 — gpt-oss-20b 챌린저. MoE active-3B → 32GB preview (part2_preflight) 가능성 있음. 64GB 진입 전 단독 시도 권장 (Track 2 §4).",
+      "_imported_from": "Ollama library qwen3.6:35b-a3b (Q4_K_M, 24GB, Apache-2.0). Pull with: ollama pull qwen3.6:35b-a3b",
+      "_runtime_notes": "thinking-off는 별도 Modelfile 대신 Ollama OpenAI-compatible reasoning_effort='none'으로 제어. q8 KV는 별도 round에서만 적용.",
       "inference_options": {
-        "chat_template_kwargs": {"enable_thinking": false}
+        "reasoning_effort": "none"
       }
     },
     {
       "label": "qwen3.6-35b-a3b-thinking-on",
-      "provider": "lm_studio",
-      "lms_key": "qwen/qwen3.6-35b-a3b",
-      "_role": "복잡 추론 / long-tail RAG 후보",
-      "load_options": {
-        "gpu": "max",
-        "context_length": 8192
-      },
+      "provider": "ollama",
+      "ollama_name": "qwen3.6:35b-a3b",
+      "_status": "local_pull_complete_2026-05-16_thinking_on_not_run",
+      "_role": "복잡 추론 / long-tail RAG 후보 (thinking-on 비교용). D 카테고리에서 reasoning trace fence 위험 사전 점검 필요 (gpt-oss medium 학습: §5.7).",
+      "_imported_from": "Ollama library qwen3.6:35b-a3b (thinking-off와 동일 base model)",
+      "_runtime_notes": "thinking-on 비교는 OpenAI-compatible reasoning_effort로 제어. D smoke를 먼저 통과해야 full 13 prompt 진입.",
       "inference_options": {
-        "chat_template_kwargs": {"enable_thinking": true}
+        "reasoning_effort": "medium"
       }
     },
     {
-      "label": "gemma-4-31b",
-      "provider": "lm_studio",
-      "lms_key": "google/gemma-4-31b",
-      "_role": "대형 dense reference",
-      "load_options": {
-        "gpu": "max",
-        "context_length": 8192
-      },
+      "label": "gemma-4-26b",
+      "provider": "ollama",
+      "ollama_name": "gemma-4:26b",
+      "_status": "tbd_verify_ollama_registry_or_import",
+      "_role": "중형 dense reference (31B 대비 효율 평가). part1 gemma4:latest와 동일 family 라인 — quant 표기 명시 필요.",
+      "_imported_from": "TBD — ollama registry 우선, 없으면 GGUF import",
       "inference_options": {}
     },
     {
-      "label": "nemotron-3-nano-omni",
-      "provider": "lm_studio",
-      "lms_key": "nvidia/nemotron-3-nano-omni",
-      "_role": "멀티모달 / 문서 understanding 실험",
-      "load_options": {
-        "gpu": "max",
-        "context_length": 4096
+      "label": "gemma-4-31b",
+      "provider": "ollama",
+      "ollama_name": "gemma-4:31b",
+      "_status": "tbd_verify_ollama_registry_or_import",
+      "_role": "대형 dense reference",
+      "_imported_from": "TBD — ollama registry 우선, 없으면 GGUF import",
+      "inference_options": {}
+    },
+    {
+      "label": "magistral-retry",
+      "provider": "ollama",
+      "ollama_name": "magistral:latest",
+      "_status": "tbd_verify_ollama_registry_or_import",
+      "_role": "Part 1 magistral 실패 재시도. 명시 template (Mistral V7 등) Modelfile에 적용하여 D_02 EOT 진단 (Track 2 §5 ministral 메모와 연동).",
+      "_imported_from": "TBD — Hugging Face GGUF + 명시 chat template Modelfile 필수",
+      "_modelfile_notes": "ollama-imports/Modelfile.magistral 생성 시 TEMPLATE 절에 명시 V7 chat template 작성. 기본 auto-template 사용 금지.",
+      "inference_options": {}
+    },
+    {
+      "label": "exaone4-32b-iq4-split",
+      "provider": "ollama",
+      "ollama_name": "exaone4-32b-iq4-4k:latest",
+      "_role": "Part 1 quick_rerun에서 32GB VRAM OOM skip → 64GB GPU+CPU split policy로 재시도. baseline 비교 보호 위해 별도 round.",
+      "_runtime_policy": {
+        "split": "GPU+CPU layered offload (ollama num_gpu 옵션). 전부 GPU 시도 → OOM이면 layer 단계적 감소 (예: num_gpu=40, 32, 24).",
+        "isolation": "동일 ollama 서버에 다른 모델 동시 로드 금지 (split 동작 안정성 확보)",
+        "label_suffix": "_split (baseline _scored_quick_rerun과 분리)"
       },
+      "_license_note": "NC 라이선스 — production 불가, 참조 측정만.",
+      "_inference_options_TBD": "num_gpu는 64GB 환경에서 실측 후 결정. eval_runner_auto.py가 inference_options.num_gpu를 ollama options.num_gpu로 전달하는지 확인 후 채움.",
       "inference_options": {}
     }
   ]

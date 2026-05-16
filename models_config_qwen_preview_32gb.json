@@ -1,0 +1,40 @@
+{
+  "_comment": "Track 2 part2_preflight — Qwen3.6-35B-A3B 32GB preview 전용 config. D smoke 먼저 실행하고, informative/pass 결과일 때만 v0.2 full 13 prompts로 확장.",
+  "_source": "Ollama library qwen3.6:35b-a3b (Q4_K_M, 24GB, Apache-2.0). Verified 2026-05-16.",
+  "_runtime_label": "part2_preflight_32gb_defaultkv_thinking_off",
+  "_baseline_policy": "quick_rerun f16/default-KV baseline과 분리. q8 KV 재시도 시 별도 config 또는 label suffix _q8kv 사용.",
+  "_recommended_sequence": [
+    "ollama pull qwen3.6:35b-a3b",
+    "python eval_runner_auto.py --config models_config_qwen_preview_32gb.json --prompts prompts/test_suite_v0.3_d_only.json",
+    "python score_runner.py --prompts prompts/test_suite_v0.3.json --results-glob \"results/qwen3.6-35b-a3b-32gb-preview-thinking-off_*.json\" --output results/_scored_qwen35b_preview_32gb_defaultkv_v03_YYYYMMDD"
+  ],
+  "models": [
+    {
+      "label": "qwen3.6-35b-a3b-32gb-preview-thinking-off",
+      "provider": "ollama",
+      "ollama_name": "qwen3.6:35b-a3b",
+      "_status": "completed_2026-05-16_full_13_defaultkv_thinking_off_v03_rescore_2026-05-17",
+      "_role": "32GB part2_preflight. D JSON-only/PHI safety gate 우선 확인.",
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "quant": "Q4_K_M",
+        "size": "24GB",
+        "kv_cache_type": "default/f16-equivalent",
+        "flash_attention": "default",
+        "reasoning_thinking_mode": "off via OpenAI-compatible reasoning_effort=none",
+        "round_label": "part2_preflight"
+      },
+      "_result_paths": [
+        "results/qwen3.6-35b-a3b-32gb-preview-thinking-off_20260516_233227.json",
+        "results/_scored_qwen35b_preview_32gb_defaultkv_20260516.json",
+        "results/qwen3.6-35b-a3b-32gb-preview-thinking-off_20260516_233527.json",
+        "results/_scored_qwen35b_preview_32gb_defaultkv_full_20260516.json",
+        "results/_scored_qwen35b_preview_32gb_defaultkv_full_v03_rescore_20260517.json",
+        "reviews/qwen35b-preview-32gb-2026-05-16-report.md"
+      ],
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    }
+  ]
+}

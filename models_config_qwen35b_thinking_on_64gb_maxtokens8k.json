@@ -1,0 +1,40 @@
+{
+  "_comment": "Diagnostic round: Qwen3.6-35B-A3B thinking-on with max_tokens=8192 to test whether D-category JSON automation completes when reasoning trace + JSON body have sufficient output budget. Mirrors models_config_qwen35b_thinking_on_64gb.json but overrides max_tokens.",
+  "_eval_set": "prompts/test_suite_v0.3.json",
+  "_recommended_sequence": [
+    "ollama ps",
+    "ollama pull qwen3.6:35b-a3b",
+    "python eval_runner_auto.py --config models_config_qwen35b_thinking_on_64gb_maxtokens8k.json --prompts prompts/test_suite_v0.3_d_only.json",
+    "score the exact timestamped raw D-smoke result with prompts/test_suite_v0.3_d_only.json",
+    "if D smoke has hard_fail 0 and D average >=4, rerun with prompts/test_suite_v0.3.json and score the exact full raw result"
+  ],
+  "_runtime_label": "part2_64gb_diagnostic_maxtok8k_thinking_on",
+  "_baseline_policy": "Diagnostic round. NOT directly comparable to default-2048-cap baselines (gpt-oss dynamic / Qwen 32GB preview). Label discipline 필수.",
+  "_policy": [
+    "Use default KV for this round. q8 KV remains a separate runtime matrix.",
+    "thinking-on is controlled per request with OpenAI-compatible reasoning_effort='medium'. Do not create a second Ollama Modelfile for thinking mode.",
+    "max_tokens=8192 override: previous default 2048-cap D smoke failed by output budget exhaustion (D_01/D_03 EMPTY_RESPONSE with completion_tokens=2048). This diagnostic checks if higher budget unblocks JSON completion.",
+    "Run D smoke first because reasoning traces/fences are the main automation-safety risk."
+  ],
+  "models": [
+    {
+      "label": "qwen3.6-35b-a3b-64gb-thinking-on-maxtok8k",
+      "provider": "ollama",
+      "ollama_name": "qwen3.6:35b-a3b",
+      "_status": "completed_2026-05-18_dsmoke_pass_full_pass_avg_3.77_HF0_diagnostic_label",
+      "_role": "thinking-on D 자동화 안전성 진단 — max_tokens=8192로 reasoning trace + JSON 예산 확보 후 D smoke 재시도",
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default/f16-equivalent (intended spec; not directly observed)",
+        "flash_attention": "default",
+        "reasoning_thinking_mode": "on via OpenAI-compatible reasoning_effort=medium",
+        "max_tokens": 8192,
+        "round_label": "part2_64gb_diagnostic_maxtok8k"
+      },
+      "inference_options": {
+        "reasoning_effort": "medium",
+        "max_tokens": 8192
+      }
+    }
+  ]
+}

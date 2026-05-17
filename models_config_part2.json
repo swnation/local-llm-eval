@@ -33,7 +33,7 @@
       "label": "qwen3.6-35b-a3b-thinking-on",
       "provider": "ollama",
       "ollama_name": "qwen3.6:35b-a3b",
-      "_status": "completed_2026-05-17_64gb_thinking_on_dsmoke_fail_full_held",
+      "_status": "completed_2026-05-17_64gb_thinking_on_dsmoke_fail_full_held; 2026-05-18 maxtok8k diagnostic PASS full 13 avg 3.77 HF0 (diagnostic label, NOT apples-to-apples with 2048-cap baselines)",
       "_role": "복잡 추론 / long-tail RAG 후보 (thinking-on 비교용). D 카테고리에서 reasoning trace fence 위험 사전 점검 필요 (gpt-oss medium 학습: §5.7).",
       "_imported_from": "Ollama library qwen3.6:35b-a3b (thinking-off와 동일 base model)",
       "_runtime_notes": "thinking-on 비교는 OpenAI-compatible reasoning_effort로 제어. D smoke를 먼저 통과해야 full 13 prompt 진입.",

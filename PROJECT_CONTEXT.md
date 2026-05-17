@@ -1,9 +1,9 @@
 # Project Context — Local LLM Eval
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
-> 마지막 갱신: 2026-05-17 (64GB Part 2 (a) Qwen thinking-on D smoke FAIL 기록)
+> 마지막 갱신: 2026-05-18 (64GB Part 2 (a') Qwen thinking-on maxtok8k diagnostic PASS, avg 3.77 HF0)
 >
-> 64GB RAM 업그레이드 완료. Part 2 진입 후 첫 라운드는 §7 #8 (a) Qwen thinking-on → D smoke FAIL로 full 13 보류. 다음 진입은 #8 (b/c/d) 또는 (a') retry.
+> 64GB RAM 업그레이드 완료. Part 2 진입 후 (a) 2048-cap FAIL → (a') maxtok8k diagnostic PASS (Total 3.77 HF0, A +1.25). 다음 진입은 fair-compare round 또는 #8 (b/c/d) Part 2 잔여.
 
 ---
 
@@ -45,6 +45,7 @@
 | **Track 1 v0.3 raw rescore 비교** | **완료 (2026-05-17)** — quick_rerun 7 + gpt-oss medium C/ABD + HARI ChatML 기존 raw 재채점. gpt-oss dynamic v0.3 **3.31 HF0**, Qwen v0.3 **3.38 HF0** |
 | **64GB RAM 업그레이드** | **완료 (2026-05-17)** — Part 2 본 실행 진입 |
 | **Qwen3.6-35B-A3B thinking-on 64GB part2 (a)** | **D smoke FAIL (2026-05-17, part2_64gb_defaultkv_thinking_on)** — D_01/D_03 `EMPTY_RESPONSE` (completion_tokens 2048 cap, reasoning trace exhausted output budget). D_02만 5점. D avg 1.67 / hard_fail 2. Full 13 보류. [report](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md) |
+| **Qwen3.6-35B-A3B thinking-on 64GB part2 (a') maxtok8k diagnostic** | **D smoke PASS + Full 13 PASS (2026-05-18, part2_64gb_diagnostic_maxtok8k_thinking_on)** — `max_tokens=8192` override. D smoke 5.00 HF0 (tokens 1642–2417, cap 미도달). Full 13 avg **3.77 HF0** (A 3.75 / B 3.33 / C 3.00 / D 5.00). 32GB thinking-off 대비 A +1.25, Total +0.39. 단 8192 budget이라 2048-cap baselines과 직접 비교 금지 — diagnostic 라벨. [report](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md) |
 
 ---
 
@@ -118,8 +119,15 @@
 - `qwen3.6:35b-a3b` + `reasoning_effort='medium'` (`thinking-on`, default KV, `part2_64gb_defaultkv_thinking_on`)
 - D smoke **FAIL**: D_01/D_03 `EMPTY_RESPONSE` (completion_tokens=2048 cap, reasoning trace consumed output budget). D_02만 통과 (5점). D avg **1.67 / hard_fail 2**. Full 13 보류.
 - 결론: 현재 production 후보 (gpt-oss dynamic 3.31 HF0) **유지**. Qwen thinking-on은 default-ctx 단일 정책으로는 D 자동화 안전성 미달.
-- 후속 가설: ① Qwen용 dynamic policy (C/A/B=thinking-on, D=thinking-off) ② num_ctx + output cap 상향 별도 round. 이번 라운드는 fair-compare 보존을 위해 retry 안 함.
+- 후속 가설: ① Qwen용 dynamic policy (C/A/B=thinking-on, D=thinking-off) ② max_tokens 상향 별도 round. 이번 라운드는 fair-compare 보존을 위해 retry 안 함.
 - 자세한 해석: [reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md)
+
+**Qwen thinking-on 64GB part 2 (a') maxtok8k diagnostic (2026-05-18)**:
+- `qwen3.6:35b-a3b` + `reasoning_effort='medium'` + `max_tokens=8192` (`part2_64gb_diagnostic_maxtok8k_thinking_on`)
+- D smoke **PASS** (5.00 HF0, completion_tokens 1642–2417, 8192 cap 미도달) → Full 13 진입
+- Full 13: **avg 3.77 / HF 0** (A **3.75** / B 3.33 / C 3.00 / D 5.00). 32GB thinking-off (3.38) 대비 A +1.25 / Total +0.39. 모든 prompt가 8k cap 미도달, A_02가 최대 4449 tokens.
+- 결론: **즉시 production 교체는 보류** — maxtok8k는 2048-cap baselines (gpt-oss dynamic / Qwen thinking-off)과 직접 비교 불가 (diagnostic 라벨). thinking-on의 A 카테고리 강세는 확정 사실, 그러나 fair-compare round (gpt-oss를 max_tokens=8192로 재실행) 거쳐야 후보 교체 정당화.
+- 자세한 해석: [reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md)
 
 ---
 
@@ -142,14 +150,16 @@
 6. ~~**v0.3 정정**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의~~ → **완료 (2026-05-17)**. `SCORING_CONTRACT.md`, `score_runner.py`, `prompts/test_suite_v0.3*.json`, regression test 반영.
 7. ~~**Track 1 v0.3 raw rescore**~~ → **완료 (2026-05-17)**. 기존 raw만 재채점: quick_rerun 7, gpt-oss medium C/ABD, HARI ChatML. gpt-oss dynamic 3.31 HF0, Qwen 3.38 HF0.
 8. **Part 2 본 실행 (64GB 업그레이드 완료 후)** — 최우선. 순서:
-   - (a) ~~Qwen3.6-35B-A3B **thinking-on** 본 측정~~ → **D smoke FAIL (2026-05-17)**. D_01/D_03 EMPTY_RESPONSE (output 2048 cap, reasoning trace 소진). full 13 보류. 후속: Qwen용 dynamic policy 또는 num_ctx 상향 round 별도. [report](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md)
+   - (a) ~~Qwen3.6-35B-A3B **thinking-on** 본 측정~~ → **D smoke FAIL (2026-05-17)**. D_01/D_03 EMPTY_RESPONSE (output 2048 cap, reasoning trace 소진). full 13 보류. [report](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md)
+   - (a') ~~Qwen thinking-on **maxtok8k diagnostic** retry~~ → **PASS (2026-05-18)**. Full 13 avg 3.77 HF0 (A 3.75 / B 3.33 / C 3.00 / D 5.00). 단 diagnostic 라벨 — 2048-cap baselines과 직접 비교 금지. [report](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md)
+   - (a'') **(권고) fair-compare round**: gpt-oss dynamic + `max_tokens=8192` 단일 diagnostic. Qwen maxtok8k 비교 정당화용 (Qwen 3.77 vs gpt-oss-at-8k = ?). 가설은 gpt-oss low가 reasoning trace 안 만들기 때문에 score 변화 미미 — 그래도 라벨 정합성 확보 필수.
    - (b) Gemma 4 26B → 31B: `ollama pull` 시도 → registry miss면 GGUF import. `models_config_part2.json` `_status: tbd_verify_ollama_registry_or_import` 항목 해결.
    - (c) magistral retry: ollama-imports/Modelfile.magistral 명시 V7 template으로 생성.
    - (d) exaone4-32b GPU+CPU split: `num_gpu` 단계적 결정 (full → 40 → 32 → 24), `_split` 라벨 분리 round, 다른 모델 동시 로드 금지.
    - (e) 종합: v0.3 기준 Qwen/Gemma/exaone4 vs gpt-oss dynamic 비교 → §6 production 후보 갱신.
-   - (a') Qwen thinking-on dynamic policy 또는 num_ctx 상향 retry (8a follow-up).
+9. **MoE / 16GB-VRAM dense 비교 라운드 (planned)** — `qwen3:30b-a3b`, `mixtral:8x7b`, `gemma3:12b`, `qwen3:14b` 등 16GB VRAM 안 spill하는 후보. Qwen 35B-A3B vs 더 작은 MoE / 동급 dense 비교 + RAG 전략 검토 trigger.
 
-→ 다음 우선: **8번 (b/c/d) Part 2 잔여 모델** + **8(a') Qwen retry**. 3번(q8 KV)·4번(gpt-oss high)·5번(ministral V7)은 Part 2 종료 후 선택 항목.
+→ 다음 우선: **8(a'') fair-compare** → **9번 MoE/dense 비교** → **8 (b/c/d) Part 2 잔여 모델**. 3번(q8 KV)·4번(gpt-oss high)·5번(ministral V7)은 Part 2 종료 후 선택 항목.
 
 ---
 

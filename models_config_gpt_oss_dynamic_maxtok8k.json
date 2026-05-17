@@ -1,0 +1,56 @@
+{
+  "_comment": "Fair-compare diagnostic round: gpt-oss-20b low/medium at max_tokens=8192 to enable apples-to-apples comparison with Qwen thinking-on maxtok8k diagnostic (commit 7240eaa, avg 3.77 HF0). Existing gpt-oss dynamic baseline (composite 3.31, HF0) was run at default 2048 cap. Hypothesis: gpt-oss low/medium reasoning traces are short, so 8k budget should barely move scores. If scores rise notably, cap policy needs revisit; if verbose/fence/HF rises, 2048 production cap stability is reinforced.",
+  "_eval_set": "prompts/test_suite_v0.3.json",
+  "_recommended_sequence": [
+    "ollama ps",
+    "python eval_runner_auto.py --config models_config_gpt_oss_dynamic_maxtok8k.json --prompts prompts/test_suite_v0.3.json",
+    "score each exact timestamped raw with prompts/test_suite_v0.3.json",
+    "construct dynamic composite per A/B/D=low, C=medium (medium D diagnostic only, excluded from composite)"
+  ],
+  "_runtime_label": "fair_compare_gpt_oss_dynamic_maxtok8k",
+  "_baseline_policy": "Fair-compare diagnostic round to Qwen thinking-on maxtok8k (commit 7240eaa). Both models at max_tokens=8192. Dynamic composite (A/B/D from low, C from medium) constructed in report. Medium D excluded per §5.",
+  "_policy": [
+    "Use default KV / default flash_attention for this round (env unset, verified).",
+    "max_tokens=8192 override only — all other inference options unchanged from v0.3 baseline.",
+    "Medium D scores must NOT enter the dynamic composite per §5; report as diagnostic-only.",
+    "Label discipline: results are NOT comparable to default-2048-cap gpt-oss dynamic baseline directly; comparison happens only at composite construction stage."
+  ],
+  "models": [
+    {
+      "label": "gpt-oss-20b-low-maxtok8k",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "_status": "completed_2026-05-18_full13_avg_3.15_HF0_scenario_A_flat_vs_2048",
+      "_role": "fair-compare low — provides A/B/D for dynamic composite at maxtok8k",
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default/f16-equivalent (intended spec; not directly observed)",
+        "flash_attention": "default",
+        "max_tokens": 8192,
+        "round_label": "fair_compare_gpt_oss_dynamic_maxtok8k"
+      },
+      "inference_options": {
+        "reasoning_effort": "low",
+        "max_tokens": 8192
+      }
+    },
+    {
+      "label": "gpt-oss-20b-medium-maxtok8k",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "_status": "completed_2026-05-18_full13_avg_3.23_HF0_C_dropped_to_2.33_medium_D_passed_diagnostic",
+      "_role": "fair-compare medium — provides C for dynamic composite at maxtok8k; A/B/D recorded as diagnostic-only (medium D excluded from composite per §5)",
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default/f16-equivalent (intended spec; not directly observed)",
+        "flash_attention": "default",
+        "max_tokens": 8192,
+        "round_label": "fair_compare_gpt_oss_dynamic_maxtok8k"
+      },
+      "inference_options": {
+        "reasoning_effort": "medium",
+        "max_tokens": 8192
+      }
+    }
+  ]
+}

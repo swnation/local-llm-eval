@@ -1,9 +1,9 @@
 # Project Context — Local LLM Eval
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
-> 마지막 갱신: 2026-05-18 (64GB Part 2 (a') Qwen thinking-on maxtok8k diagnostic PASS, avg 3.77 HF0)
+> 마지막 갱신: 2026-05-18 (64GB Part 2 (a'') gpt-oss maxtok8k fair-compare 완료 — Scenario A 확정)
 >
-> 64GB RAM 업그레이드 완료. Part 2 진입 후 (a) 2048-cap FAIL → (a') maxtok8k diagnostic PASS (Total 3.77 HF0, A +1.25). 다음 진입은 fair-compare round 또는 #8 (b/c/d) Part 2 잔여.
+> 64GB RAM 업그레이드 완료. Part 2 진입: (a) 2048-cap FAIL → (a') Qwen maxtok8k 3.77 → (a'') gpt-oss maxtok8k 3.23 (Δ vs 2048: -0.08, Scenario A). **Qwen +0.54 fair-compare lead 확정** (라벨 정합성 OK). 다음 진입은 #9 MoE+dense round (RAG 전략 판단 trigger).
 
 ---
 
@@ -46,6 +46,7 @@
 | **64GB RAM 업그레이드** | **완료 (2026-05-17)** — Part 2 본 실행 진입 |
 | **Qwen3.6-35B-A3B thinking-on 64GB part2 (a)** | **D smoke FAIL (2026-05-17, part2_64gb_defaultkv_thinking_on)** — D_01/D_03 `EMPTY_RESPONSE` (completion_tokens 2048 cap, reasoning trace exhausted output budget). D_02만 5점. D avg 1.67 / hard_fail 2. Full 13 보류. [report](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md) |
 | **Qwen3.6-35B-A3B thinking-on 64GB part2 (a') maxtok8k diagnostic** | **D smoke PASS + Full 13 PASS (2026-05-18, part2_64gb_diagnostic_maxtok8k_thinking_on)** — `max_tokens=8192` override. D smoke 5.00 HF0 (tokens 1642–2417, cap 미도달). Full 13 avg **3.77 HF0** (A 3.75 / B 3.33 / C 3.00 / D 5.00). 32GB thinking-off 대비 A +1.25, Total +0.39. 단 8192 budget이라 2048-cap baselines과 직접 비교 금지 — diagnostic 라벨. [report](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md) |
+| **gpt-oss dynamic 64GB part2 (a'') maxtok8k fair-compare** | **PASS — Scenario A 확정 (2026-05-18, fair_compare_gpt_oss_dynamic_maxtok8k)** — low+medium 양쪽 full 13 (max_tokens=8192). Composite (A/B/D low + C medium) **3.23 HF0**, 2048 baseline 3.31 대비 **Δ -0.08** (noise). 토큰 최대 1232 (8k cap 멀리 미달). gpt-oss는 8k에서 score 거의 안 움직임 — Qwen maxtok8k 3.77 vs gpt-oss maxtok8k 3.23 = **+0.54 fair-compare lead (apples-to-apples)** 라벨 정합 확보. Medium D 진단 finding: 2048의 §5.7 fence fail이 8k에서 재현 안 됨 (5.00 HF0). §5 rule 변경 근거로는 불충분. [report](reviews/gpt-oss-dynamic-maxtok8k-fair-compare-2026-05-18-report.md) |
 
 ---
 
@@ -126,8 +127,24 @@
 - `qwen3.6:35b-a3b` + `reasoning_effort='medium'` + `max_tokens=8192` (`part2_64gb_diagnostic_maxtok8k_thinking_on`)
 - D smoke **PASS** (5.00 HF0, completion_tokens 1642–2417, 8192 cap 미도달) → Full 13 진입
 - Full 13: **avg 3.77 / HF 0** (A **3.75** / B 3.33 / C 3.00 / D 5.00). 32GB thinking-off (3.38) 대비 A +1.25 / Total +0.39. 모든 prompt가 8k cap 미도달, A_02가 최대 4449 tokens.
-- 결론: **즉시 production 교체는 보류** — maxtok8k는 2048-cap baselines (gpt-oss dynamic / Qwen thinking-off)과 직접 비교 불가 (diagnostic 라벨). thinking-on의 A 카테고리 강세는 확정 사실, 그러나 fair-compare round (gpt-oss를 max_tokens=8192로 재실행) 거쳐야 후보 교체 정당화.
 - 자세한 해석: [reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md)
+
+**gpt-oss dynamic 64GB part 2 (a'') maxtok8k fair-compare (2026-05-18)**:
+- `gpt-oss:20b` × 2 (low + medium) at `max_tokens=8192` (`fair_compare_gpt_oss_dynamic_maxtok8k`)
+- low full 13: **3.15 HF0** (A 3.00 / B 2.67 / C 2.00 / D 5.00). 2048 대비 +0.15 (noise)
+- medium full 13: **3.23 HF0** (A 3.50 / B 2.00 / C 2.33 / D 5.00). C 카테고리 2048의 3.33에서 8k에서 2.33으로 하락 (-1.00) — sampling noise 가능
+- **Composite (A/B/D low + C medium, HF selected-set)**: **3.23 HF0**. 2048 composite 3.31 대비 **Δ -0.08** (noise 수준)
+- 토큰: low 최대 485, medium 최대 1232. 8k cap 한 번도 미도달 — **2048 cap이 gpt-oss에는 충분했다는 증거**
+- 가설 판정: **Scenario A 확정** (gpt-oss는 maxtok8k에서 거의 안 움직임). 8k는 budget overkill
+- Medium D 진단 finding: **medium D도 5.00 / HF 0, JSON parse 모두 OK, fence/think leak 없음**. 2048 cap의 §5.7 `medium D=fence fail` 패턴이 8k에서 재현 안 됨. 흥미로운 신호지만 단일 round 진단으로 §5 forbidden rule 변경 근거 불충분 — 별도 multi-seed verification 필요
+- **Qwen vs gpt-oss apples-to-apples (both maxtok8k)**: **Qwen 3.77 vs gpt-oss 3.23 = +0.54** (A +0.75 / B +0.66 / C +0.67 / D 0). 라벨 정합성 확보된 진짜 격차
+- 자세한 해석: [reviews/gpt-oss-dynamic-maxtok8k-fair-compare-2026-05-18-report.md](reviews/gpt-oss-dynamic-maxtok8k-fair-compare-2026-05-18-report.md)
+
+**결론 (production candidate, R5 pending)**:
+- `gpt-oss-20b dynamic` (2048 cap, 3.31 HF0) **provisional 유지**
+- Qwen 64GB thinking-on maxtok8k (3.77 HF0)는 **+0.54 fair-compare lead 확정된 challenger**
+- 즉시 displacement 보류 사유: ① 운영 latency (Qwen 35B 38분 vs gpt-oss 6분, full 13 기준 ~6×) ② VRAM split (Qwen 61%/39% CPU/GPU vs gpt-oss 20%/80%) ③ maxtok8k 비용 (4× output budget) ④ Round 9 dense/MoE 후보 미측정 — RAG-augmented 작은 모델이 더 나은 architecture일 가능성
+- 최종 후보 결정: Round 9 결과 후
 
 ---
 
@@ -152,14 +169,14 @@
 8. **Part 2 본 실행 (64GB 업그레이드 완료 후)** — 최우선. 순서:
    - (a) ~~Qwen3.6-35B-A3B **thinking-on** 본 측정~~ → **D smoke FAIL (2026-05-17)**. D_01/D_03 EMPTY_RESPONSE (output 2048 cap, reasoning trace 소진). full 13 보류. [report](reviews/qwen35b-part2-64gb-thinking-on-2026-05-17-report.md)
    - (a') ~~Qwen thinking-on **maxtok8k diagnostic** retry~~ → **PASS (2026-05-18)**. Full 13 avg 3.77 HF0 (A 3.75 / B 3.33 / C 3.00 / D 5.00). 단 diagnostic 라벨 — 2048-cap baselines과 직접 비교 금지. [report](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md)
-   - (a'') **(권고) fair-compare round**: gpt-oss dynamic + `max_tokens=8192` 단일 diagnostic. Qwen maxtok8k 비교 정당화용 (Qwen 3.77 vs gpt-oss-at-8k = ?). 가설은 gpt-oss low가 reasoning trace 안 만들기 때문에 score 변화 미미 — 그래도 라벨 정합성 확보 필수.
+   - (a'') ~~fair-compare round (gpt-oss dynamic maxtok8k)~~ → **완료 (2026-05-18)**. composite **3.23 HF0** (2048 baseline 3.31 대비 Δ -0.08, Scenario A). Qwen vs gpt-oss apples-to-apples 격차 **+0.54** 확정. [report](reviews/gpt-oss-dynamic-maxtok8k-fair-compare-2026-05-18-report.md)
    - (b) Gemma 4 26B → 31B: `ollama pull` 시도 → registry miss면 GGUF import. `models_config_part2.json` `_status: tbd_verify_ollama_registry_or_import` 항목 해결.
    - (c) magistral retry: ollama-imports/Modelfile.magistral 명시 V7 template으로 생성.
    - (d) exaone4-32b GPU+CPU split: `num_gpu` 단계적 결정 (full → 40 → 32 → 24), `_split` 라벨 분리 round, 다른 모델 동시 로드 금지.
    - (e) 종합: v0.3 기준 Qwen/Gemma/exaone4 vs gpt-oss dynamic 비교 → §6 production 후보 갱신.
-9. **MoE / 16GB-VRAM dense 비교 라운드 (planned)** — `qwen3:30b-a3b`, `mixtral:8x7b`, `gemma3:12b`, `qwen3:14b` 등 16GB VRAM 안 spill하는 후보. Qwen 35B-A3B vs 더 작은 MoE / 동급 dense 비교 + RAG 전략 검토 trigger.
+9. **MoE / 16GB-VRAM dense 비교 라운드 (진행 예정)** — `qwen3:30b-a3b`, `mixtral:8x7b`, `gemma3:12b`, `qwen3:14b`, `qwen3:8b` 후보. default 2048 cap (gpt-oss dynamic 3.31 baseline과 fair compare). Dense 12-14B가 gpt-oss ±0.3 안에 들면 RAG-augmented 작은 모델 architecture 전략 정당화 / 멀리 떨어지면 큰 모델 답.
 
-→ 다음 우선: **8(a'') fair-compare** → **9번 MoE/dense 비교** → **8 (b/c/d) Part 2 잔여 모델**. 3번(q8 KV)·4번(gpt-oss high)·5번(ministral V7)은 Part 2 종료 후 선택 항목.
+→ 다음 우선: **9번 MoE/dense 비교** → **8 (b/c/d) Part 2 잔여 모델**. 3번(q8 KV)·4번(gpt-oss high)·5번(ministral V7)은 Part 2 종료 후 선택 항목.
 
 ---
 

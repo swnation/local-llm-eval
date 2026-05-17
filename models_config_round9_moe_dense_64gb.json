@@ -1,0 +1,112 @@
+{
+  "_comment": "Round 9 MoE + 16GB-VRAM dense comparator round. Five candidates at default 2048 cap, thinking-off where applicable. Purpose: determine whether smaller MoE (qwen3:30b-a3b vs Qwen 35B-A3B) or other-architecture MoE (mixtral:8x7b) is sufficient, AND whether dense 12-14B models land within +/-0.3 of gpt-oss dynamic 2048 baseline (3.31 HF0) which would unlock the RAG-augmented-small-model production architecture.",
+  "_eval_set": "prompts/test_suite_v0.3.json",
+  "_recommended_sequence": [
+    "ollama ps",
+    "ollama pull qwen3:8b ; ollama pull gemma3:12b ; ollama pull qwen3:14b ; ollama pull qwen3:30b-a3b ; ollama pull mixtral:8x7b",
+    "python eval_runner_auto.py --config models_config_round9_moe_dense_64gb.json --prompts prompts/test_suite_v0.3.json",
+    "score each exact timestamped raw with prompts/test_suite_v0.3.json"
+  ],
+  "_runtime_label": "round9_moe_dense_64gb_2048cap",
+  "_baseline_policy": "Apples-to-apples comparison with gpt-oss dynamic 2048 baseline (3.31 HF0). All models at default 2048 cap, thinking-off where applicable. NOT directly comparable to maxtok8k diagnostic rounds (Qwen 3.77, gpt-oss 3.23) - separate budget axis.",
+  "_policy": [
+    "Use default KV / default flash_attention for this round (env unset, verified at start).",
+    "Default 2048 max_tokens cap (no override).",
+    "Thinking-off for Qwen3 family via reasoning_effort='none'.",
+    "Gemma3 and Mixtral are non-thinking models, no reasoning_effort override.",
+    "Label discipline: results comparable to gpt-oss dynamic 2048 baseline; NOT comparable to maxtok8k diagnostic rounds (separate budget axis)."
+  ],
+  "models": [
+    {
+      "label": "qwen3-8b",
+      "provider": "ollama",
+      "ollama_name": "qwen3:8b",
+      "_status": "completed_2026-05-18_full13_avg_3.38_HF0_A2.75_B3.33_C3.33_D4.33_dense_floor_PASSES_RAG_track",
+      "_role": "dense floor - smallest Qwen3 dense, thinking-off",
+      "_pull_size_gb": 5.2,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default (intended spec; not directly observed)",
+        "flash_attention": "default (intended spec; not directly observed)",
+        "num_ctx": "default (intended spec; not directly observed)",
+        "max_tokens": "default 2048 cap",
+        "round_label": "round9_moe_dense_64gb_2048cap"
+      },
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    },
+    {
+      "label": "gemma3-12b",
+      "provider": "ollama",
+      "ollama_name": "gemma3:12b",
+      "_status": "completed_2026-05-18_full13_avg_2.23_HF3_A2.50_B3.33_C3.00_D0.00_disqualified_by_D_markdown_json_fence_rehabilitatable_via_prompt_reinforcement",
+      "_role": "dense 12B Korean-strong - tests dense-model RAG-architecture decision trigger",
+      "_pull_size_gb": 8.1,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default (intended spec; not directly observed)",
+        "flash_attention": "default (intended spec; not directly observed)",
+        "num_ctx": "default (intended spec; not directly observed)",
+        "max_tokens": "default 2048 cap",
+        "round_label": "round9_moe_dense_64gb_2048cap"
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "qwen3-14b",
+      "provider": "ollama",
+      "ollama_name": "qwen3:14b",
+      "_status": "completed_2026-05-18_full13_avg_3.31_HF0_A3.00_B2.67_C2.67_D5.00_EXACTLY_MATCHES_gpt_oss_baseline_RAG_co_equal_candidate",
+      "_role": "dense 14B Qwen family - direct in-family comparator vs 8b and 30b-a3b",
+      "_pull_size_gb": 9.3,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default (intended spec; not directly observed)",
+        "flash_attention": "default (intended spec; not directly observed)",
+        "num_ctx": "default (intended spec; not directly observed)",
+        "max_tokens": "default 2048 cap",
+        "round_label": "round9_moe_dense_64gb_2048cap"
+      },
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    },
+    {
+      "label": "qwen3-30b-a3b",
+      "provider": "ollama",
+      "ollama_name": "qwen3:30b-a3b",
+      "_status": "completed_2026-05-18_full13_avg_2.38_HF3_A3.50_B2.67_C3.00_D0.00_reasoning_effort_none_NOT_honored_by_Ollama_reasoning_prose_leaks_into_all_responses_PHI_leak_in_D_02_4_cap_hits_at_2048",
+      "_role": "MoE small Qwen sibling - is smaller MoE sufficient vs 35b-a3b?",
+      "_pull_size_gb": 18.0,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default (intended spec; not directly observed)",
+        "flash_attention": "default (intended spec; not directly observed)",
+        "num_ctx": "default (intended spec; not directly observed)",
+        "max_tokens": "default 2048 cap",
+        "round_label": "round9_moe_dense_64gb_2048cap"
+      },
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    },
+    {
+      "label": "mixtral-8x7b",
+      "provider": "ollama",
+      "ollama_name": "mixtral:8x7b",
+      "_status": "completed_2026-05-18_full13_avg_1.92_HF3_A2.00_B2.67_C3.00_D0.00_D_01_D_02_markdown_fence_D_03_early_EOT_truncation_19_tokens",
+      "_role": "MoE different architecture - 8 experts x 7B, non-Qwen MoE comparator",
+      "_pull_size_gb": 26.0,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "kv_cache_type": "default (intended spec; not directly observed)",
+        "flash_attention": "default (intended spec; not directly observed)",
+        "num_ctx": "default (intended spec; not directly observed)",
+        "max_tokens": "default 2048 cap",
+        "round_label": "round9_moe_dense_64gb_2048cap"
+      },
+      "inference_options": {}
+    }
+  ]
+}

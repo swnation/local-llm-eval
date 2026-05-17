@@ -19,7 +19,7 @@
       "label": "qwen3.6-35b-a3b-64gb-thinking-on",
       "provider": "ollama",
       "ollama_name": "qwen3.6:35b-a3b",
-      "_status": "pending_64gb_post_upgrade",
+      "_status": "completed_2026-05-17_64gb_thinking_on_dsmoke_fail_full_held",
       "_role": "Priority 1 challenger check. Compare against 32GB thinking-off v0.3 score 3.38 HF0 and gpt-oss dynamic v0.3 score 3.31 HF0.",
       "_runtime_metadata": {
         "provider": "ollama",

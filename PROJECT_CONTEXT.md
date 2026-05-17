@@ -2,6 +2,8 @@
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
 > 마지막 갱신: 2026-05-17 (v0.3 scoring/prompt 정정 완료 + Track 1 v0.3 raw rescore)
+>
+> ⚠ **2026-05-17 64GB RAM 업그레이드 진행 예정.** 업그레이드 완료 후 §7 항목 8(Part 2 본 실행) 부터 진입. 그 전 액션 3/4/5는 deprioritized.
 
 ---
 
@@ -41,6 +43,7 @@
 | **Qwen3.6-35B-A3B 32GB preview** | **완료 (2026-05-16, part2_preflight default KV / thinking-off)** — D smoke 4.67 HF0, full 13 avg 3.31 HF0 |
 | **v0.3 scoring/prompt 정정** | **완료 (2026-05-17)** — D_01 forbidden false-positive / A_04 marker / sentence tolerance ±2 / format-only score=4 반영. Qwen raw v0.3 rescore: avg 3.38 HF0 |
 | **Track 1 v0.3 raw rescore 비교** | **완료 (2026-05-17)** — quick_rerun 7 + gpt-oss medium C/ABD + HARI ChatML 기존 raw 재채점. gpt-oss dynamic v0.3 **3.31 HF0**, Qwen v0.3 **3.38 HF0** |
+| **64GB RAM 업그레이드** | **진행 중 (2026-05-17)** — 하드웨어 작업. 완료 시 Part 2 본 실행 진입 가능 |
 
 ---
 
@@ -130,8 +133,14 @@
 5. **(선택) ministral V7 template Modelfile 재시도**: D_02 1 token EOT 진단
 6. ~~**v0.3 정정**: D_01 `"변경"` 어미 명시 / A_04 `[확인 필요]` marker 강화 / sentence count tolerance ±1→±2 / format-only-fail 점수 정의~~ → **완료 (2026-05-17)**. `SCORING_CONTRACT.md`, `score_runner.py`, `prompts/test_suite_v0.3*.json`, regression test 반영.
 7. ~~**Track 1 v0.3 raw rescore**~~ → **완료 (2026-05-17)**. 기존 raw만 재채점: quick_rerun 7, gpt-oss medium C/ABD, HARI ChatML. gpt-oss dynamic 3.31 HF0, Qwen 3.38 HF0.
+8. **Part 2 본 실행 (64GB 업그레이드 완료 후)** — 최우선. 순서:
+   - (a) Qwen3.6-35B-A3B **thinking-on** 본 측정 (D smoke → full 13, v0.3 scorer). thinking-off 대비 C 개선 여부 검증.
+   - (b) Gemma 4 26B → 31B: `ollama pull` 시도 → registry miss면 GGUF import. `models_config_part2.json` `_status: tbd_verify_ollama_registry_or_import` 항목 해결.
+   - (c) magistral retry: ollama-imports/Modelfile.magistral 명시 V7 template으로 생성.
+   - (d) exaone4-32b GPU+CPU split: `num_gpu` 단계적 결정 (full → 40 → 32 → 24), `_split` 라벨 분리 round, 다른 모델 동시 로드 금지.
+   - (e) 종합: v0.3 기준 Qwen/Gemma/exaone4 vs gpt-oss dynamic 비교 → §6 production 후보 갱신.
 
-→ 다음 우선: 3번(q8 KV runtime matrix, 비교 목적) 또는 4번(gpt-oss high 1~2 prompt). 64GB 업그레이드 후에는 v0.3 기준 Qwen thinking-on/off 재측정 + Gemma 4 26B/31B 진입.
+→ 다음 우선: **8번 (Part 2 본 실행)**. 64GB 업그레이드 완료 후 즉시 진입. 3번(q8 KV)·4번(gpt-oss high)·5번(ministral V7)은 Part 2 종료 후 선택 항목.
 
 ---
 
@@ -153,6 +162,7 @@
 - [models_config_quick_rerun.json](models_config_quick_rerun.json) — 7 모델 all-ollama
 - [models_config_d_smoke.json](models_config_d_smoke.json) — D smoke용 2 모델
 - [models_config_part2.json](models_config_part2.json) — 64GB용 (Qwen3.6-35B 등)
+- [models_config_qwen35b_thinking_on_64gb.json](models_config_qwen35b_thinking_on_64gb.json) — 64GB 업그레이드 직후 첫 실행용 Qwen thinking-on 단독 config
 - [models_config_hari{8,14}b_chatml.json](models_config_hari14b_chatml.json) — 보조 실험용
 
 ### Review packets
@@ -161,6 +171,7 @@
 - [reviews/codex-r2-response.md](reviews/codex-r2-response.md) — Step 1 산출물 review (CONDITIONAL GO → GO)
 - [reviews/codex-r3-response.md](reviews/codex-r3-response.md) — compute_score 분기 (CONDITIONAL GO → GO)
 - [reviews/review-packet-v0.2-r4-quick-rerun.md](reviews/review-packet-v0.2-r4-quick-rerun.md) ★ **현재 진행 round**
+- [reviews/claude-code-handoff-64gb-upgrade-2026-05-17.md](reviews/claude-code-handoff-64gb-upgrade-2026-05-17.md) — 64GB 업그레이드 후 Claude Code 복귀용 handoff
 
 ### Step 4 산출물
 - [reviews/quick-rerun-2026-05-16-report.md](reviews/quick-rerun-2026-05-16-report.md) — 종합 리포트

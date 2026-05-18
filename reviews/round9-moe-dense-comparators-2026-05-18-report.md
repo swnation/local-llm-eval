@@ -2,7 +2,7 @@
 
 Date: 2026-05-18
 Round label: `round9_moe_dense_64gb_2048cap`
-Status: **RAG-augmented small-model architecture justified** — qwen3:14b dense matches gpt-oss baseline exactly (3.31 HF0); qwen3:8b floor sits +0.07 above. Both MoE candidates and gemma3:12b disqualified by D hard_fail.
+Status: **Small dense (qwen3:8b/14b) proven equivalent to gpt-oss baseline on non-RAG v0.3 eval** — qwen3:14b dense matches gpt-oss baseline exactly (3.31 HF0); qwen3:8b floor sits +0.07 above. This justifies *promoting* RAG-augmented small dense as a primary production-candidate architecture for the next phase, but the RAG contribution itself is unmeasured (v0.3 does not probe retrieval). Both MoE candidates and gemma3:12b disqualified by D hard_fail.
 
 > Purpose: at default 2048 cap (apples-to-apples with `gpt-oss dynamic 2048` baseline of 3.31 HF0), measure five candidates to answer two questions: (1) is a smaller MoE (qwen3:30b-a3b) or other-architecture MoE (mixtral:8x7b) sufficient versus the 35B Qwen MoE? (2) does a dense 12-14B model land within ±0.3 of the gpt-oss baseline — which would unlock the "RAG-augmented small dense model" production architecture instead of "larger Qwen MoE"?
 
@@ -215,7 +215,7 @@ The round was designed to fire one of three branches:
 - **MoE candidates fail HF**: neither qwen3:30b-a3b nor mixtral:8x7b clears the D safety bar. They are not direct substitutes for the Qwen 35B-A3B in §6.
 - **gemma3:12b is rehabilitatable**: A/B/C all reasonable (2.50 / 3.33 / 3.00 — slightly above gpt-oss baseline on B), failures are pure formatting (markdown fence). A prompt-level "no fences, raw JSON only" reinforcement or a fence-strip post-processor would likely restore D to 4.00–5.00.
 
-→ **Recommendation: RAG-augmented small dense model (qwen3:14b primary, qwen3:8b fallback) is now a credible production architecture candidate.** Promote to next round of comparison alongside `gpt-oss dynamic` and `Qwen 35B thinking-on maxtok8k`.
+→ **Recommendation**: Small dense (qwen3:14b primary, qwen3:8b fallback) demonstrated parity with the gpt-oss dynamic baseline on the non-RAG v0.3 13-prompt set. This *promotes* RAG-augmented small dense to a primary production-candidate architecture lane alongside `gpt-oss dynamic` and `Qwen 35B thinking-on maxtok8k`, but the RAG advantage itself is **unmeasured here** — v0.3 contains no retrieval-dependent prompts. Next phase: design RAG-aware eval set, then compare small-dense+RAG vs the existing baselines under that set.
 
 ## D Spot Check Summary
 

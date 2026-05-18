@@ -1,6 +1,9 @@
 # 평가 결과 (모델 출력은 용량 크고 매번 달라짐 — 커밋 X)
 results/
 
+# 로컬 실행 로그 (eval_runner stdout / agent 부수 산물)
+logs/
+
 # Python 캐시
 __pycache__/
 *.pyc

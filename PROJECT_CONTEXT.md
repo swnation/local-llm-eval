@@ -208,6 +208,7 @@
 - [score_runner.py](score_runner.py) — 자동 채점 (SCORING_CONTRACT.md 구현체)
 
 ### Config
+- [docs/connected-environment-2026-05-18.md](docs/connected-environment-2026-05-18.md) — connected runtime / GPU / RAM / disk / remote-host handoff metadata
 - [models_config_quick_rerun.json](models_config_quick_rerun.json) — 7 모델 all-ollama
 - [models_config_d_smoke.json](models_config_d_smoke.json) — D smoke용 2 모델
 - [models_config_part2.json](models_config_part2.json) — 64GB용 (Qwen3.6-35B 등)

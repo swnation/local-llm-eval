@@ -184,6 +184,7 @@
    - (d) exaone4-32b GPU+CPU split: `num_gpu` 단계적 결정 (full → 40 → 32 → 24), `_split` 라벨 분리 round, 다른 모델 동시 로드 금지.
    - (e) 종합: v0.3 기준 Qwen/Gemma/exaone4 vs gpt-oss dynamic 비교 → §6 production 후보 갱신.
 9. ~~**MoE / 16GB-VRAM dense 비교 라운드**~~ → **완료 (2026-05-18, round9_moe_dense_64gb_2048cap)**. qwen3:8b 3.38/HF0, qwen3:14b 3.31/HF0 (둘 다 baseline ±0.3 안) → **Branch 1 발화**: small dense가 non-RAG eval에서 gpt-oss와 동급임을 입증. RAG-augmented small dense를 production primary 후보로 **promote할 근거 확보** (RAG 자체 효과는 별도 eval에서 검증). MoE 후보 (qwen3:30b-a3b, mixtral:8x7b)와 gemma3:12b는 D HF로 탈락. [report](reviews/round9-moe-dense-comparators-2026-05-18-report.md).
+10. **RAG Phase 1 진입 (작업 폴더 이동)** — clinical-assist본 폴더 `c:\Github\EMR_AI_24clinic\`로 작업 이동. 인수인계 문서: [`AI용_RAG_Phase1_인수인계_2026-05-18.md`](file:///c:/Github/EMR_AI_24clinic/AI용_RAG_Phase1_인수인계_2026-05-18.md). Phase 2 (RAG-aware eval)에서 다시 local-llm-eval로 복귀 예정.
 10. **(P1, 신규) RAG eval set 설계 + 측정** — 현재 13 prompts는 explanation/cleanup만 측정. RAG-track 결정 완료하려면 retrieval-augmented Q&A 5-10 prompts 신규 필요 (findings_index + master DB excerpt 소비 → safe grounded output). 이 set으로 qwen3:14b + RAG vs gpt-oss dynamic 직접 비교.
 11. **(P2, 신규) qwen3:30b-a3b 명시 Modelfile thinking-off retry** — 오늘 실패는 Ollama 템플릿이 원인. 직접 system-prompt 또는 quant variant로 reasoning trace 제거 시 35B-A3B 대비 fair comparison 가능.
 12. **(P3, 신규) gemma3:12b D-fence prompt-reinforcement 실험** — `"do NOT wrap JSON in markdown fences"` D system prompt 강화 후 D smoke만 재실행. HF 0 떨어지면 3번째 RAG 후보 (8.1 GB, Korean-strong).

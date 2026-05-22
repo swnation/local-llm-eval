@@ -74,35 +74,75 @@ Confirmation note:
 
 ## 3. Sub-Computer / Remote Environment Status
 
-This session can see `MAINPC` only. If a separate sub-computer is connected,
-its specs are not automatically confirmed from this shell.
-
-Fill or confirm before Claude uses the sub-computer for any run:
+Confirmed via SSH on 2026-05-18. Connection verified, Ollama running, models pulled, benchmarks executed.
 
 ```text
-sub_host:
-os:
-cpu:
-ram:
-gpu_count:
-gpu:
-vram:
-nvidia_driver:
-python:
-ollama_version:
-ollama_models:
-connection_method:
-shared_folder_or_repo_path:
-intended_role:
+sub_host: DESKTOP-ATD4TUK
+os: Windows (exact build TBD)
+cpu: AMD Ryzen 7 5800X
+ram: 32 GB
+gpu_count: 1
+gpu: NVIDIA GeForce RTX 4070 Ti SUPER
+vram: 16 GB
+nvidia_driver: TBD
+python: TBD
+ollama_version: TBD
+ollama_models: qwen3:8b, qwen3:14b, gpt-oss:20b, qwen3:30b-a3b
+connection_method: ssh -i C:\Users\swnat\.ssh\codex_sub_ed25519 swnat@192.168.68.52
+shared_folder_or_repo_path: C:\Github\local-llm-eval
+intended_role: sub20b_eval_runner
 ```
 
-Suggested intended roles:
+### Benchmark Results (2026-05-18, ollama_probe.py)
 
-- `qwen35b_preview`
-- `part2_64gb_runner`
-- `q8kv_runtime_round`
-- `rag_eval_runner`
-- `secondary_gpu_experiment`
+| Model | Host | tok/s | Notes |
+|---|---|---:|---|
+| `qwen3:14b` | mainpc | ~57 | num_ctx uncontrolled (may be >4k) |
+| `qwen3:14b` | subpc | ~62 | stable; mainpc와 실질 동급 |
+| `gpt-oss:20b` | mainpc | ~82 | num_ctx=131k 상태 (불리) |
+| `gpt-oss:20b` | subpc | ~135 | num_ctx=4k 추정; 같은 ctx면 메인도 향상 가능 |
+| `qwen3:30b-a3b` | mainpc | ~31 (warm) | cold load ~19s |
+| `qwen3:30b-a3b` | subpc | ~24 (warm) | cold load ~213s; 반복 러너 비실용 |
+
+**Fair-compare 주의**: 메인은 일부 모델에서 Ollama가 큰 num_ctx로 잡혀 있어 tok/s가 낮게 나올 수 있음. 순수 비교는 `num_ctx=4096` 강제 후 재측정 필요.
+
+### Sub-Computer Role Assignment
+
+| Role | Models | Rationale |
+|---|---|---|
+| Primary runner | `qwen3:14b`, `gpt-oss:20b` | 62~135 tok/s, 16GB VRAM 내 안정 |
+| Low-resource fallback | `qwen3:8b` | 5.2 GB, sub-second per prompt |
+| Experimental limit | `qwen3:30b-a3b` | cold 213s, warm 24 tok/s — 1회성 실험만 |
+| Not suitable | 35B+, long context, RAG-heavy | VRAM/RAM 한계 → 메인 전용 |
+
+Intended roles:
+
+- `sub20b_eval_runner` — 8B/14B/20B D-smoke, quick eval, 반복 벤치
+- `rag_eval_runner` — qwen3:8b/14b + RAG 빠른 반복 (메인에서 최종 비교)
+
+### Standardized Commands (run from mainpc)
+
+**Config**: `models_config_subpc.json` (qwen3:8b, qwen3:14b, gpt-oss:20b only)
+
+```powershell
+# SSH alias (if configured): ssh subpc
+# Full form:
+$SSH = "ssh -i C:\Users\swnat\.ssh\codex_sub_ed25519 swnat@192.168.68.52"
+
+# 1. Probe (single model tok/s check)
+Invoke-Expression "$SSH `"cd /d C:\Github\local-llm-eval && python tools/ollama_probe.py qwen3:14b`""
+
+# 2. D-smoke only (quick safety gate)
+Invoke-Expression "$SSH `"cd /d C:\Github\local-llm-eval && python eval_runner_auto.py --config models_config_subpc.json --prompts prompts/test_suite_v0.3.json`""
+
+# 3. Full 13 eval (same command, config determines scope)
+# Same as above — models_config_subpc.json runs all 3 models × 13 prompts
+
+# 4. Result retrieval (scp to mainpc)
+scp -i C:\Users\swnat\.ssh\codex_sub_ed25519 "swnat@192.168.68.52:C:/Github/local-llm-eval/results/*subpc*" C:\Github\local-llm-eval\results\subpc\
+```
+
+**After retrieval**: score/interpret on mainpc. Subpc produces raw results; mainpc is source of truth for scoring and documentation.
 
 ---
 

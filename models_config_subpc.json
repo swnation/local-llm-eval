@@ -1,0 +1,78 @@
+{
+  "_comment": "Sub-computer (DESKTOP-ATD4TUK) runner config. RTX 4070 Ti SUPER 16GB / 32GB RAM. 반복 eval용 — 20B 이하 모델만. qwen3:30b-a3b는 cold load 213s로 반복 러너 부적합, 별도 manual 실행.",
+  "_eval_set": "prompts/test_suite_v0.3.json",
+  "_recommended_sequence": [
+    "ollama ps",
+    "python eval_runner_auto.py --config models_config_subpc.json --prompts prompts/test_suite_v0.3.json"
+  ],
+  "_runtime_label": "subpc_eval_runner",
+  "_host": "subpc (DESKTOP-ATD4TUK, RTX 4070 Ti SUPER 16GB, 32GB RAM)",
+  "_policy": [
+    "서브컴 전용 config — 메인에서 실행하지 말 것.",
+    "결과 라벨에 반드시 host=subpc 포함.",
+    "Default KV / default flash_attention / default num_ctx.",
+    "Default 2048 max_tokens cap.",
+    "Thinking-off for Qwen3 family via reasoning_effort='none'.",
+    "결과 회수: scp로 메인에 복사 후 메인에서 채택/정리."
+  ],
+  "models": [
+    {
+      "label": "subpc-qwen3-8b",
+      "provider": "ollama",
+      "ollama_name": "qwen3:8b",
+      "_role": "low-resource fallback, sub-second per prompt",
+      "_pull_size_gb": 5.2,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "host": "subpc",
+        "gpu": "RTX 4070 Ti SUPER 16GB",
+        "kv_cache_type": "default",
+        "flash_attention": "default",
+        "num_ctx": "default",
+        "max_tokens": "default 2048 cap",
+        "round_label": "subpc_eval_runner"
+      },
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    },
+    {
+      "label": "subpc-qwen3-14b",
+      "provider": "ollama",
+      "ollama_name": "qwen3:14b",
+      "_role": "primary subpc runner, 62 tok/s measured, gpt-oss baseline match (3.31 HF0)",
+      "_pull_size_gb": 9.3,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "host": "subpc",
+        "gpu": "RTX 4070 Ti SUPER 16GB",
+        "kv_cache_type": "default",
+        "flash_attention": "default",
+        "num_ctx": "default",
+        "max_tokens": "default 2048 cap",
+        "round_label": "subpc_eval_runner"
+      },
+      "inference_options": {
+        "reasoning_effort": "none"
+      }
+    },
+    {
+      "label": "subpc-gpt-oss-20b",
+      "provider": "ollama",
+      "ollama_name": "gpt-oss:20b",
+      "_role": "provisional production baseline, 135 tok/s on subpc, dynamic reasoning_effort",
+      "_pull_size_gb": 13.0,
+      "_runtime_metadata": {
+        "provider": "ollama",
+        "host": "subpc",
+        "gpu": "RTX 4070 Ti SUPER 16GB",
+        "kv_cache_type": "default",
+        "flash_attention": "default",
+        "num_ctx": "default",
+        "max_tokens": "default 2048 cap",
+        "round_label": "subpc_eval_runner"
+      },
+      "inference_options": {}
+    }
+  ]
+}

@@ -5,6 +5,8 @@
 >
 > 64GB RAM 업그레이드 완료. Part 2 진입: (a) 2048-cap FAIL → (a') Qwen maxtok8k 3.77 → (a'') gpt-oss maxtok8k 3.23 (Δ vs 2048: -0.08, Scenario A). **Qwen +0.54 fair-compare lead 확정**. Round 9 추가 결과: **qwen3:14b 3.31/HF0 (gpt-oss baseline 정확히 일치), qwen3:8b 3.38/HF0** — non-RAG v0.3 13 prompts에서 small dense가 gpt-oss dynamic과 동급 이상임이 입증됨. **RAG-augmented small dense architecture를 production primary 후보로 promote할 근거 확보** (단, RAG 효과 자체는 별도 RAG-aware eval set 필요). MoE 후보 (qwen3:30b-a3b, mixtral:8x7b)는 D HF로 탈락.
 
+> **현재 active goal (2026-05-22)**: RAG-aware Phase 2 eval planning. `docs/rag_aware_eval_design_r0.md` = Phase 2.1 design R1 frozen baseline, `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.1 R1 frozen baseline. Heavy run 은 HP Z2 setup 완료 + RA-03 `{TBD-code}`/expected citation 사용자 확정 + 명시 `Phase 2 heavy run GO` 전까지 금지.
+
 ---
 
 ## §1. 프로젝트 정체성
@@ -48,6 +50,7 @@
 | **Qwen3.6-35B-A3B thinking-on 64GB part2 (a') maxtok8k diagnostic** | **D smoke PASS + Full 13 PASS (2026-05-18, part2_64gb_diagnostic_maxtok8k_thinking_on)** — `max_tokens=8192` override. D smoke 5.00 HF0 (tokens 1642–2417, cap 미도달). Full 13 avg **3.77 HF0** (A 3.75 / B 3.33 / C 3.00 / D 5.00). 32GB thinking-off 대비 A +1.25, Total +0.39. 단 8192 budget이라 2048-cap baselines과 직접 비교 금지 — diagnostic 라벨. [report](reviews/qwen35b-part2-64gb-thinking-on-maxtok8k-2026-05-18-report.md) |
 | **gpt-oss dynamic 64GB part2 (a'') maxtok8k fair-compare** | **PASS — Scenario A 확정 (2026-05-18, fair_compare_gpt_oss_dynamic_maxtok8k)** — low+medium 양쪽 full 13 (max_tokens=8192). Composite (A/B/D low + C medium) **3.23 HF0**, 2048 baseline 3.31 대비 **Δ -0.08** (noise). 토큰 최대 1232 (8k cap 멀리 미달). gpt-oss는 8k에서 score 거의 안 움직임 — Qwen maxtok8k 3.77 vs gpt-oss maxtok8k 3.23 = **+0.54 fair-compare lead (apples-to-apples)** 라벨 정합 확보. Medium D 진단 finding: 2048의 §5.7 fence fail이 8k에서 재현 안 됨 (5.00 HF0). §5 rule 변경 근거로는 불충분. [report](reviews/gpt-oss-dynamic-maxtok8k-fair-compare-2026-05-18-report.md) |
 | **Round 9 MoE + 16GB-VRAM dense comparators** | **완료 (2026-05-18, round9_moe_dense_64gb_2048cap)** — 5개 후보 default 2048 cap. **qwen3:8b 3.38/HF0, qwen3:14b 3.31/HF0 (정확히 baseline match)** — small dense가 non-RAG eval에서 gpt-oss와 동급 입증 → RAG-augmented small dense를 production primary 후보로 **promote할 근거 마련** (RAG 효과는 별도 eval set에서 측정 필요). gemma3:12b 2.23/HF3 (D ```json fence — 수정 가능), qwen3:30b-a3b 2.38/HF3 (reasoning_effort=none 미적용 → reasoning trace leak + PHI leak), mixtral:8x7b 1.92/HF3 (fence + truncation). [report](reviews/round9-moe-dense-comparators-2026-05-18-report.md) |
+| **서브컴(subpc) 환경 고정** | **완료 (2026-05-18)** — DESKTOP-ATD4TUK (Ryzen7 5800X / 32GB / RTX 4070 Ti SUPER 16GB). `models_config_subpc.json` 생성 (qwen3:8b/14b, gpt-oss:20b). SSH 실행/scp 회수 명령 표준화. [환경 문서](docs/connected-environment-2026-05-18.md) §3. 역할: 20B 이하 실험 러너, RAG-aware eval 준비 대기 |
 
 ---
 
@@ -214,6 +217,7 @@
 - [models_config_part2.json](models_config_part2.json) — 64GB용 (Qwen3.6-35B 등)
 - [models_config_qwen35b_thinking_on_64gb.json](models_config_qwen35b_thinking_on_64gb.json) — 64GB 업그레이드 직후 첫 실행용 Qwen thinking-on 단독 config
 - [models_config_round9_moe_dense_64gb.json](models_config_round9_moe_dense_64gb.json) — Round 9 MoE+dense 5 후보 (qwen3:8b/14b/30b-a3b, gemma3:12b, mixtral:8x7b)
+- [models_config_subpc.json](models_config_subpc.json) — 서브컴(DESKTOP-ATD4TUK) 전용 반복 러너 (qwen3:8b/14b, gpt-oss:20b). 메인에서 실행 금지
 - [models_config_hari{8,14}b_chatml.json](models_config_hari14b_chatml.json) — 보조 실험용
 
 ### Review packets

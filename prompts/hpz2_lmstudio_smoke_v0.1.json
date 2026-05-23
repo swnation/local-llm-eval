@@ -1,0 +1,45 @@
+{
+  "version": "hpz2-lmstudio-smoke-v0.1",
+  "status": "R0 official HP Z2 LM Studio smoke prompt",
+  "description": "Single-prompt visible-output smoke used to establish a fresh HP Z2 + LM Studio/Vulkan model viability baseline. This is not a RAG eval and not a Phase 2 heavy run.",
+  "policy": [
+    "Run only on the HP Z2 official runner.",
+    "Use the same prompt, temperature, max_tokens, context length, and load profile for every candidate model.",
+    "Do not compare these latency values with earlier 5080, subpc, or Ollama runs.",
+    "Completion-token throughput is raw API usage/completion_tokens divided by API wall time; hidden/thinking token overhead must be recorded separately from visible output quality."
+  ],
+  "tests": [
+    {
+      "id": "HPZ2_LMS_SMOKE_001",
+      "category": "backend_smoke",
+      "title": "Short visible output check",
+      "intent": "Verify that the model loads through LM Studio/Vulkan and returns visible text under a shared low-context smoke profile.",
+      "expected": "Visible output contains OK or an equivalent one-sentence acknowledgement.",
+      "system": "You are being tested for backend smoke only. Do not solve a clinical task. Do not reveal reasoning. Return one short visible sentence only.",
+      "user": "Say OK in one short sentence.",
+      "temperature": 0.0,
+      "max_tokens": 512,
+      "rubric": {
+        "required_elements": [
+          "OK"
+        ],
+        "forbidden_elements": [
+          "```",
+          "<think>",
+          "</think>"
+        ],
+        "format_requirements": {
+          "visible_output_required": true,
+          "max_sentences": 1
+        },
+        "hard_fail": {
+          "conditions": [
+            "empty visible response",
+            "API error",
+            "model load failure"
+          ]
+        }
+      }
+    }
+  ]
+}

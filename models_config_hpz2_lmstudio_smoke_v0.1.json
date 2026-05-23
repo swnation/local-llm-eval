@@ -1,0 +1,116 @@
+{
+  "version": "0.1",
+  "status": "R0 official HP Z2 LM Studio/Vulkan smoke matrix config",
+  "_scope": "Light smoke only. This config is not a RAG Phase 2 heavy eval config.",
+  "_official_execution_host": "HP Z2 Mini G1a",
+  "_canonical_workspace": "Main PC keeps source-of-truth docs, commits, and pushes. HP Z2 is execution-only runner.",
+  "_backend": {
+    "provider": "lm_studio",
+    "runtime": "llama.cpp Vulkan",
+    "server_url_default": "http://127.0.0.1:1234/v1",
+    "server_lan_url_observed": "http://192.168.68.50:1234/v1"
+  },
+  "_load_profile": {
+    "gpu": "max",
+    "context_length": 4096,
+    "ttl": 120,
+    "parallel": 1,
+    "estimate_before_load": true
+  },
+  "_prompt_set": "prompts/hpz2_lmstudio_smoke_v0.1.json",
+  "_measurement_policy": [
+    "All models are equal candidates in this smoke matrix.",
+    "Use the same load profile: lms load <model> --gpu max --context-length 4096 --ttl 120.",
+    "Use one prompt with temperature=0.0 and max_tokens=512.",
+    "Record load_s, api_wall_s, completion_tokens, total_tokens, raw tok/s, visible output, and errors.",
+    "Do not reuse earlier 5080, subpc, or Ollama speeds as official HP Z2 baseline values.",
+    "gpt-oss-120b Ollama/ROCm failure remains backend-specific and must not be treated as LM Studio failure.",
+    "Qwen35/Gemma hidden or thinking token overhead is expected to be possible; raw token throughput and visible output should be interpreted separately."
+  ],
+  "models": [
+    {
+      "label": "hpz2-lms-qwen3-8b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-8b",
+      "_role": "small dense fallback candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-qwen3-14b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-14b",
+      "_role": "dense baseline candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-20b",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-20b",
+      "_role": "gpt-oss medium-size comparison candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-granite-4.1-30b",
+      "provider": "lm_studio",
+      "lms_key": "ibm/granite-4.1-30b",
+      "_role": "secondary 30B comparison candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-qwen3.6-35b-a3b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "_role": "Qwen MoE quality candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gemma-4-31b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-31b",
+      "_role": "secondary dense quality/safety wording comparison candidate",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-120b",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-120b",
+      "_role": "large model viability candidate; LM Studio/Vulkan lane only",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    }
+  ]
+}

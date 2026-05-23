@@ -19,13 +19,14 @@ Current frozen planning artifacts:
 
 - `docs/rag_aware_eval_design_r0.md` = Phase 2.1 design R1 frozen baseline
 - `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.1 R1 frozen baseline
+- `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json` = Phase 2 Stage A LM Studio config R0.2 (includes all HP Z2 LM Studio smoke-pass models + execution pacing)
 
 Phase 2 heavy run remains blocked until:
 
 - HP Z2 setup is complete
-- RA-03 `{TBD-code-1}` / `{TBD-code-2}` / `{TBD-dx}` are user-confirmed
-- RA-03 expected citation source IDs are verified against the RAG index
 - The user explicitly issues `Phase 2 heavy run GO`
+
+RA-03 is resolved as `sme + trimesy + lacto2`, `dx=a090`, pediatric `age=1`; expected citations are verified in current RAG chunks. Do not change those values without explicit user instruction.
 
 ## Current Runner Baseline
 
@@ -38,6 +39,9 @@ Phase 2 model viability baselines should now be measured on the official HP Z2 r
 - Smoke config: `models_config_hpz2_lmstudio_smoke_v0.1.json`
 - Smoke prompt: `prompts/hpz2_lmstudio_smoke_v0.1.json`
 - Runbook: `docs/hpz2-lmstudio-official-smoke-baseline-2026-05-24.md`
+- Phase 2 Stage A config: `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json`
+- Phase 2 Stage A config note: `docs/hpz2-lmstudio-phase2-stage-a-config-2026-05-24.md`
+- Phase 2 Stage A pacing: unload before/after each model, confirm `lms status` has no loaded models, wait 90s after unload, wait 180s after large models or failures.
 
 The main PC remains the canonical workspace for review, documentation, commit, and push. HP Z2 is execution-only unless the user explicitly changes that rule.
 
@@ -50,5 +54,5 @@ Earlier 5080, subpc, Ollama, or manual one-off results are exploratory only and 
 - Do not enter Phase 1d implementation from this repo.
 - Do not regenerate the 681 chunk baseline or touch chunk-variation work unless explicitly reopened.
 - Do not revert app prompt files for Stage C; use runner-side fixtures only if that stage is approved.
-- Do not infer RA-03 codes or RA-01~RA-05 expected wording; those are user-owned.
+- Do not change RA-03 resolved values or infer RA-01/RA-02/RA-05 expected wording; those are user-owned.
 - Do not commit or push unless explicitly requested.

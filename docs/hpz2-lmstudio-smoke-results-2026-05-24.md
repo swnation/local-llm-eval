@@ -82,8 +82,8 @@ The retry result is adopted as the official `gpt-oss-20b` smoke value for this b
 ## Follow-Up Items
 
 1. Patch `tools/hpz2_lmstudio_smoke_matrix.py` so `lms load` and `lms load --estimate-only` can run non-interactively when LM Studio reports multiple matching model keys. Status: resolved in local follow-up by adding configurable `lms_cli_args` and setting the HP Z2 smoke config default to `["-y"]`.
-2. Add a Phase 2 LM Studio config only after the smoke runner ambiguity is fixed.
-3. Keep RAG Phase 2 heavy run blocked until RA-03 input codes and expected citations are user-confirmed.
+2. Add a Phase 2 LM Studio config only after the smoke runner ambiguity is fixed. Status: resolved in local follow-up by adding `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json`.
+3. Keep RAG Phase 2 heavy run blocked until RA-03 input codes and expected citations are user-confirmed. Status: RA-03 resolved in local follow-up; heavy run still blocked until explicit `Phase 2 heavy run GO`.
 4. Keep HP Z2 as execution-only runner and main PC as canonical docs/commit/push workspace unless the user changes that rule.
 
 ## Stop Carry

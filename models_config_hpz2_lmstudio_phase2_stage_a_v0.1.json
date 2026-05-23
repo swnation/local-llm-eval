@@ -1,0 +1,279 @@
+{
+  "version": "0.1",
+  "status": "R0.2 Phase 2 Stage A LM Studio config patch only. granite-4.1-30b and gemma-4-31b added by user request; no model execution has been run from this config.",
+  "_scope": "RAG-aware Phase 2.2 Stage A model-axis config for EMR_AI_24clinic /explain. This is not the HP Z2 smoke config and not a heavy-run result artifact.",
+  "_official_execution_host": "HP Z2 Mini G1a",
+  "_canonical_workspace": "Main PC keeps source-of-truth docs, commits, and pushes. HP Z2 is execution-only runner.",
+  "_hard_stops": [
+    "Do not run this config unless the user explicitly issues Phase 2 heavy run GO.",
+    "Do not write to EMR_AI_24clinic from this config patch.",
+    "Do not commit or push without explicit user GO.",
+    "Do not run Stage B top_k, Stage C prompt-tone, or chunk variation without separate GO."
+  ],
+  "_backend": {
+    "provider": "lm_studio",
+    "runtime": "llama.cpp Vulkan",
+    "server_url_default": "http://127.0.0.1:1234/v1",
+    "server_lan_url_observed": "http://192.168.68.50:1234/v1",
+    "_note": "LM Studio server URL is for the LLM backend lane. The /explain app endpoint host is runner-specific and must be supplied by the heavy-run runner."
+  },
+  "_rag_endpoint": {
+    "app_repo": "../../EMR_AI_24clinic",
+    "path": "/explain",
+    "eval_set": "prompts/rag_aware_eval_set_v0.1.json",
+    "mode": "rag_endpoint",
+    "case_count": 15,
+    "model_call_expected_cases": 14,
+    "phi_early_return_case": "RA-04-PHI-input-stress",
+    "common_options_default": {
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false
+    }
+  },
+  "_load_profile": {
+    "gpu": "max",
+    "context_length": 4096,
+    "ttl": 120,
+    "parallel": 1,
+    "estimate_before_load": true,
+    "lms_cli_args": ["-y"],
+    "_note": "The -y CLI arg is required to avoid interactive multiple-match prompts for keys such as openai/gpt-oss-20b."
+  },
+  "_execution_pacing": {
+    "unload_all_before_each_model": true,
+    "unload_all_after_each_model": true,
+    "require_lms_status_no_models_loaded_before_next_load": true,
+    "post_load_settle_sec": 10,
+    "post_unload_cooldown_sec": 90,
+    "post_large_model_cooldown_sec": 180,
+    "post_failure_cooldown_sec": 180,
+    "large_model_labels": [
+      "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "hpz2-lms-gemma-4-31b-rag",
+      "hpz2-lms-gpt-oss-120b-rag"
+    ],
+    "_note": "Future heavy-run runner should not immediately load the next model after a long load/unload. Wait for LM Studio to report no loaded models, then apply the cooldown before continuing."
+  },
+  "_stage_policy": [
+    "Stage A is model-axis only: top_k=5, min_similarity=0.45, Fix v3 prompt tone, current chunk baseline.",
+    "qwen3-14b is the primary small-dense RAG candidate.",
+    "qwen3-8b is the fallback / low-resource RAG candidate.",
+    "gpt-oss-20b is the direct RAG endpoint comparison candidate.",
+    "qwen3.6-35b-a3b is the large challenger.",
+    "granite-4.1-30b and gemma-4-31b are included by user request after HP Z2 LM Studio smoke viability.",
+    "gpt-oss-120b is included by user request after HP Z2 LM Studio smoke viability; interpret results with its long load time tracked separately.",
+    "Use execution pacing between all models; especially after qwen3.6-35b-a3b, gemma-4-31b, and gpt-oss-120b."
+  ],
+  "stage_a_cells": [
+    {
+      "cell_id": "stageA-qwen3-14b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-qwen3-14b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "primary small-dense RAG candidate"
+    },
+    {
+      "cell_id": "stageA-qwen3-8b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-qwen3-8b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "fallback / low-resource RAG candidate"
+    },
+    {
+      "cell_id": "stageA-gpt-oss-20b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-gpt-oss-20b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "direct RAG endpoint comparison candidate"
+    },
+    {
+      "cell_id": "stageA-qwen3.6-35b-a3b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "large challenger"
+    },
+    {
+      "cell_id": "stageA-granite-4.1-30b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-granite-4.1-30b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "secondary 30B comparison candidate added by user request"
+    },
+    {
+      "cell_id": "stageA-gemma-4-31b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-gemma-4-31b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "secondary dense quality/safety wording comparison candidate added by user request"
+    },
+    {
+      "cell_id": "stageA-gpt-oss-120b-rag",
+      "stage": "A",
+      "mode": "rag_endpoint",
+      "model_label": "hpz2-lms-gpt-oss-120b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "large gpt-oss comparison candidate added by user request"
+    }
+  ],
+  "models": [
+    {
+      "label": "hpz2-lms-qwen3-14b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-14b",
+      "served_model_id": "hpz2-lms-qwen3-14b-rag",
+      "_role": "primary small-dense RAG candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-qwen3-8b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-8b",
+      "served_model_id": "hpz2-lms-qwen3-8b-rag",
+      "_role": "fallback / low-resource RAG candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-20b-rag",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-20b",
+      "served_model_id": "hpz2-lms-gpt-oss-20b-rag",
+      "_role": "direct RAG endpoint comparison candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio retry baseline after non-interactive -y resolution",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "served_model_id": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "_role": "large challenger",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-granite-4.1-30b-rag",
+      "provider": "lm_studio",
+      "lms_key": "ibm/granite-4.1-30b",
+      "served_model_id": "hpz2-lms-granite-4.1-30b-rag",
+      "_role": "secondary 30B comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gemma-4-31b-rag",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-31b",
+      "served_model_id": "hpz2-lms-gemma-4-31b-rag",
+      "_role": "secondary dense quality/safety wording comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-120b-rag",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-120b",
+      "served_model_id": "hpz2-lms-gpt-oss-120b-rag",
+      "_role": "large gpt-oss comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline; load_s about 100.666",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 120
+      },
+      "inference_options": {}
+    }
+  ],
+  "hold_models": [],
+  "version_log": [
+    {
+      "version": "R0",
+      "date": "2026-05-24",
+      "change": "Initial Phase 2 Stage A LM Studio config patch after HP Z2 smoke baseline and RA-03 user resolution. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.1 gpt-oss-120b target add",
+      "date": "2026-05-24",
+      "change": "Added openai/gpt-oss-120b as a Phase 2 Stage A RAG endpoint test target by user request. Removed it from hold_models; granite-4.1-30b and gemma-4-31b remain HOLD. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.2 all smoke-pass targets + pacing",
+      "date": "2026-05-24",
+      "change": "Added ibm/granite-4.1-30b and google/gemma-4-31b as Phase 2 Stage A RAG endpoint test targets by user request. hold_models is now empty. Added execution pacing policy: require unload/no-models status before next load, 90s default post-unload cooldown, 180s cooldown after large models or failures, and 10s post-load settle. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    }
+  ]
+}

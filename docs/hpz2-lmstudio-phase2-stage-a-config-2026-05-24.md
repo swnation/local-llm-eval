@@ -1,14 +1,15 @@
 # HP Z2 LM Studio Phase 2 Stage A Config
 
-Status: R0.2 config patch
+Status: R0.3 config + runner patch
 Date: 2026-05-24
-Scope: Config and runbook notes only. No model execution.
+Scope: Config, runner, and runbook notes only. No model execution.
 
 ## Purpose
 
 This patch adds the Phase 2 Stage A LM Studio configuration:
 
 - Config: `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json`
+- Runner: `tools/hpz2_lmstudio_phase2_stage_a_runner.py`
 - Eval set: `prompts/rag_aware_eval_set_v0.1.json`
 - Execution host: HP Z2 Mini G1a
 - Backend: LM Studio
@@ -78,8 +79,35 @@ This config patch did not:
 - push
 - enter Stage B, Stage C, chunk variation, or Phase 1d
 
+## Commands
+
+Dry-run validation only:
+
+```powershell
+python tools\hpz2_lmstudio_phase2_stage_a_runner.py `
+  --config models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json `
+  --eval-set prompts\rag_aware_eval_set_v0.1.json `
+  --dry-run
+```
+
+Actual Stage A execution, HP Z2 only, after explicit `Phase 2 heavy run GO`:
+
+```powershell
+python tools\hpz2_lmstudio_phase2_stage_a_runner.py `
+  --config models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json `
+  --eval-set prompts\rag_aware_eval_set_v0.1.json `
+  --server-url http://127.0.0.1:1234/v1 `
+  --confirm-hpz2 `
+  --confirm-heavy-run
+```
+
+The runner imports `EMR_AI_24clinic` read-only and patches only the in-process `generate_llm` callable so `/explain` uses LM Studio chat completions. It does not save LLM settings and does not modify the EMR repo.
+
 ## Runner Notes
 
 The future heavy-run runner must load each LM Studio model with the `served_model_id` from the config so the `/explain` app calls the same identifier. The runner must also point the app's LLM backend to LM Studio `http://127.0.0.1:1234/v1`.
 
-The `/explain` application host is intentionally not hard-coded in this config. It should be supplied by the heavy-run runner for the HP Z2 environment.
+The runner writes ignored local artifacts under `results/`:
+
+- `results/hpz2_lmstudio_phase2_stage_a_<timestamp>.json`
+- `results/hpz2_lmstudio_phase2_stage_a_<timestamp>.md`

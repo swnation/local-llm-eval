@@ -18,9 +18,10 @@
     "_note": "LM Studio server URL is for the LLM backend lane. The /explain app endpoint host is runner-specific and must be supplied by the heavy-run runner."
   },
   "_rag_endpoint": {
-    "app_repo": "../../EMR_AI_24clinic",
+    "app_repo": "../EMR_AI_24clinic",
     "path": "/explain",
     "eval_set": "prompts/rag_aware_eval_set_v0.1.json",
+    "runner": "tools/hpz2_lmstudio_phase2_stage_a_runner.py",
     "mode": "rag_endpoint",
     "case_count": 15,
     "model_call_expected_cases": 14,
@@ -274,6 +275,11 @@
       "version": "R0.2 all smoke-pass targets + pacing",
       "date": "2026-05-24",
       "change": "Added ibm/granite-4.1-30b and google/gemma-4-31b as Phase 2 Stage A RAG endpoint test targets by user request. hold_models is now empty. Added execution pacing policy: require unload/no-models status before next load, 90s default post-unload cooldown, 180s cooldown after large models or failures, and 10s post-load settle. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.3 runner binding",
+      "date": "2026-05-24",
+      "change": "Bound Stage A config to tools/hpz2_lmstudio_phase2_stage_a_runner.py and corrected app_repo path relative to local-llm-eval repo root. Runner-side LM Studio adapter keeps EMR_AI_24clinic read-only. Patch/validation only: heavy run X / model execution X / EMR_AI_24clinic write X."
     }
   ]
 }

@@ -40,6 +40,7 @@ Phase 2 model viability baselines should now be measured on the official HP Z2 r
 - Smoke prompt: `prompts/hpz2_lmstudio_smoke_v0.1.json`
 - Runbook: `docs/hpz2-lmstudio-official-smoke-baseline-2026-05-24.md`
 - Phase 2 Stage A config: `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json`
+- Phase 2 Stage A runner: `tools/hpz2_lmstudio_phase2_stage_a_runner.py`
 - Phase 2 Stage A config note: `docs/hpz2-lmstudio-phase2-stage-a-config-2026-05-24.md`
 - Phase 2 Stage A pacing: unload before/after each model, confirm `lms status` has no loaded models, wait 90s after unload, wait 180s after large models or failures.
 

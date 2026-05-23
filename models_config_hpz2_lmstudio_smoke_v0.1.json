@@ -15,12 +15,14 @@
     "context_length": 4096,
     "ttl": 120,
     "parallel": 1,
-    "estimate_before_load": true
+    "estimate_before_load": true,
+    "lms_cli_args": ["-y"]
   },
   "_prompt_set": "prompts/hpz2_lmstudio_smoke_v0.1.json",
   "_measurement_policy": [
     "All models are equal candidates in this smoke matrix.",
     "Use the same load profile: lms load <model> --gpu max --context-length 4096 --ttl 120.",
+    "Use non-interactive lms CLI confirmation: -y. This avoids the gpt-oss 20B/120B multiple-match prompt during estimate/load.",
     "Use one prompt with temperature=0.0 and max_tokens=512.",
     "Record load_s, api_wall_s, completion_tokens, total_tokens, raw tok/s, visible output, and errors.",
     "Do not reuse earlier 5080, subpc, or Ollama speeds as official HP Z2 baseline values.",

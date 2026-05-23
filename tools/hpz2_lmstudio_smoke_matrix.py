@@ -92,20 +92,38 @@ def option_args(options: dict, include_ttl: bool = True) -> list[str]:
     return args
 
 
+def normalize_cli_args(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    raise TypeError("lms_cli_args must be a string or list of strings")
+
+
 def unload_all(lms_exe: str) -> dict:
     return run_cmd([lms_exe, "unload", "--all"], timeout=120)
 
 
-def estimate_model(lms_exe: str, model_key: str, load_options: dict) -> dict:
+def estimate_model(lms_exe: str, model_key: str, load_options: dict, cli_args: list[str]) -> dict:
     cmd = [lms_exe, "load", model_key]
     cmd.extend(option_args(load_options, include_ttl=False))
     cmd.append("--estimate-only")
+    cmd.extend(cli_args)
     return run_cmd(cmd, timeout=300)
 
 
-def load_model(lms_exe: str, model_key: str, identifier: str, load_options: dict) -> dict:
+def load_model(
+    lms_exe: str,
+    model_key: str,
+    identifier: str,
+    load_options: dict,
+    cli_args: list[str],
+) -> dict:
     cmd = [lms_exe, "load", model_key, "--identifier", identifier]
     cmd.extend(option_args(load_options))
+    cmd.extend(cli_args)
     return run_cmd(cmd, timeout=LOAD_TIMEOUT_SEC)
 
 
@@ -306,6 +324,9 @@ def main() -> int:
         label = model["label"]
         key = model["lms_key"]
         load_options = model.get("load_options", {})
+        cli_args = normalize_cli_args(
+            model.get("lms_cli_args", config.get("_load_profile", {}).get("lms_cli_args"))
+        )
         extra_options = model.get("inference_options", {})
         print(f"\n[{index}/{len(models)}] {label} ({key})")
 
@@ -315,12 +336,13 @@ def main() -> int:
             "lms_key": key,
             "role": model.get("_role", ""),
             "load_options": load_options,
+            "lms_cli_args": cli_args,
             "inference_options": extra_options,
         }
 
         if not args.skip_estimate:
             print("  estimate...")
-            estimate = estimate_model(lms_exe, key, load_options)
+            estimate = estimate_model(lms_exe, key, load_options, cli_args)
             row["estimate"] = estimate
             if estimate["returncode"] != 0:
                 row["success"] = False
@@ -330,7 +352,7 @@ def main() -> int:
                 continue
 
         print("  load...")
-        load = load_model(lms_exe, key, label, load_options)
+        load = load_model(lms_exe, key, label, load_options, cli_args)
         row["load"] = load
         row["load_s"] = load["elapsed_s"]
         if load["returncode"] != 0:

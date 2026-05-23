@@ -12,7 +12,7 @@ The official execution baseline for this smoke matrix is:
 - Backend: LM Studio
 - Runtime: llama.cpp Vulkan
 - Server: `http://127.0.0.1:1234/v1`
-- Load profile: `--gpu max --context-length 4096 --ttl 120`
+- Load profile: `--gpu max --context-length 4096 --ttl 120 -y`
 - Prompt: `prompts/hpz2_lmstudio_smoke_v0.1.json`
 - Config: `models_config_hpz2_lmstudio_smoke_v0.1.json`
 
@@ -85,6 +85,8 @@ Record these fields per model:
 - error, if any
 
 Raw tok/s is calculated as `completion_tokens / api_wall_s`. Models that spend many tokens on hidden or thinking output can show high raw tok/s while visible output remains short. Interpret raw throughput separately from visible response quality.
+
+The runner appends `-y` to `lms load` and `lms load --estimate-only` through the config default `lms_cli_args`. This keeps the run non-interactive when LM Studio reports multiple matching model keys, such as `openai/gpt-oss-20b` versus `openai/gpt-oss-120b`.
 
 ## Stop Conditions
 

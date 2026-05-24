@@ -1,6 +1,6 @@
 # HP Z2 LM Studio Phase 2 Stage A-R Model-Aware Config
 
-Status: R0.1 config + runner patch
+Status: R0.2 config + runner patch
 Date: 2026-05-24
 Scope: `local-llm-eval` only. No model execution.
 
@@ -20,6 +20,7 @@ behavior.
 
 The runner now supports per-model `inference_options`:
 
+- Stage A-R load context set to 32768 for all models on HP Z2.
 - LM Studio JSON schema structured output.
 - Model-specific sampling values.
 - Qwen `/no_think` prompt suffixes for concise JSON RAG answers.
@@ -43,6 +44,12 @@ The runner now supports per-model `inference_options`:
 | gemma-4-31b | `gemma4-standard-json-rag` | JSON schema, temp 1.0, top_p 0.95, top_k 64 |
 | gpt-oss-120b | `gpt-oss-medium-reasoning-structured-rag` | `Reasoning: medium`, JSON schema, temp 0.0 |
 
+Load profile for all Stage A-R models:
+
+```text
+--gpu max --context-length 32768 --ttl 3600 -y
+```
+
 ## Interpretation
 
 Stage A remains the strict endpoint-readiness result. Stage A-R should be used
@@ -52,6 +59,10 @@ documented operating mode is respected.
 If Stage A-R improves Qwen or Gemma, the production decision still needs a
 separate integration decision because model-specific prompt/postprocess handling
 would need to be made explicit in the app or runtime lane.
+
+Stage A-R also uses HP Z2's optimized 32768 context load policy. Compare this
+against Stage A carefully, because Stage A keeps the original 4096 strict
+baseline.
 
 ## Commands
 

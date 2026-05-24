@@ -20,7 +20,8 @@ This patch adds the Phase 2 Stage A LM Studio configuration:
 Related follow-up: `models_config_hpz2_lmstudio_phase2_stage_ar_v0.1.json`
 adds a model-aware Stage A-R rerun lane. Stage A remains the strict endpoint
 baseline; Stage A-R diagnoses whether model-specific structured output and
-reasoning/no-thinking settings improve viability.
+reasoning/no-thinking settings improve viability. Stage A-R uses the HP Z2
+optimized `--context-length 32768` load policy; Stage A keeps `4096`.
 
 Main PC remains the canonical workspace for review, documentation, commit, and push. HP Z2 remains execution-only.
 

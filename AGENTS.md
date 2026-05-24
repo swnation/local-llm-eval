@@ -45,6 +45,7 @@ Phase 2 model viability baselines should now be measured on the official HP Z2 r
 - Phase 2 Stage A-R model-aware config: `models_config_hpz2_lmstudio_phase2_stage_ar_v0.1.json`
 - Phase 2 Stage A-R note: `docs/hpz2-lmstudio-phase2-stage-ar-model-aware-2026-05-24.md`
 - Phase 2 Stage A pacing: unload before/after each model, confirm `lms status` has no loaded models, wait 90s after unload, wait 180s after large models or failures.
+- Phase 2 Stage A-R load profile: `--gpu max --context-length 32768 --ttl 3600 -y` on HP Z2. Stage A strict baseline remains `4096`.
 - Stage A-R does not replace the Stage A strict endpoint baseline; use it only to test model-aware profiles such as Qwen `/no_think`, gpt-oss reasoning hints, Granite RAG/extraction settings, Gemma sampling, and LM Studio JSON schema output.
 
 The main PC remains the canonical workspace for review, documentation, commit, and push. HP Z2 is execution-only unless the user explicitly changes that rule.

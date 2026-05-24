@@ -1,6 +1,6 @@
 {
   "version": "0.1-stage-ar",
-  "status": "R0.1 Stage A-R model-aware RAG config patch only. Preserves Stage A strict baseline; no model execution has been run from this config.",
+  "status": "R0.2 Stage A-R model-aware RAG config patch only. Preserves Stage A strict baseline; uses HP Z2 optimized 32768 context load policy; no model execution has been run from this config.",
   "_scope": "RAG-aware Phase 2.2 Stage A-R model-aware rerun config for EMR_AI_24clinic /explain. Uses model-specific structured-output and reasoning/no-thinking profiles; does not replace the Stage A strict baseline.",
   "_official_execution_host": "HP Z2 Mini G1a",
   "_canonical_workspace": "Main PC keeps source-of-truth docs, commits, and pushes. HP Z2 is execution-only runner.",
@@ -35,14 +35,14 @@
   },
   "_load_profile": {
     "gpu": "max",
-    "context_length": 4096,
+    "context_length": 32768,
     "ttl": 3600,
     "parallel": 1,
     "estimate_before_load": true,
     "lms_cli_args": [
       "-y"
     ],
-    "_note": "Stage A-R keeps models loaded longer during diagnosis; runner still unloads between models for fair isolated cells. The -y CLI arg avoids interactive multiple-match prompts."
+    "_note": "Stage A-R uses the HP Z2 optimized 32768 context load policy. It keeps models loaded longer during diagnosis; runner still unloads between models for fair isolated cells. The -y CLI arg avoids interactive multiple-match prompts."
   },
   "_execution_pacing": {
     "unload_all_before_each_model": true,
@@ -78,7 +78,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -108,7 +108,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -138,7 +138,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio retry baseline after non-interactive -y resolution",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -160,7 +160,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -191,7 +191,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -213,7 +213,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -242,7 +242,7 @@
       "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline; load_s about 100.666",
       "load_options": {
         "gpu": "max",
-        "context_length": 4096,
+        "context_length": 32768,
         "ttl": 3600
       },
       "inference_options": {
@@ -283,6 +283,11 @@
       "version": "R0.1 Stage A-R model-aware profiles",
       "date": "2026-05-24",
       "change": "Added model-aware inference profiles for Stage A-R: JSON schema structured output for all models; Qwen non-thinking /no_think profile; gpt-oss reasoning hints; Granite RAG extraction profile; Gemma documented sampling + channel cleanup. New config only: model execution X / EMR_AI_24clinic source write X / commit X / push X."
+    },
+    {
+      "version": "R0.2 Stage A-R 32768 context policy",
+      "date": "2026-05-24",
+      "change": "Updated Stage A-R load policy from context_length 4096 to 32768 for all models to match HP Z2 optimized LM Studio default and successful 32k estimates. Stage A strict baseline remains 4096. Config only: model execution X / EMR_AI_24clinic source write X / commit X / push X."
     }
   ],
   "_stage_label": "HP Z2 LM Studio Phase 2 Stage A-R Model-Aware RAG",

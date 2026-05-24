@@ -17,6 +17,11 @@ This patch adds the Phase 2 Stage A LM Studio configuration:
 - LM Studio server: `http://127.0.0.1:1234/v1`
 - Load profile: `--gpu max --context-length 4096 --ttl 120 -y`
 
+Related follow-up: `models_config_hpz2_lmstudio_phase2_stage_ar_v0.1.json`
+adds a model-aware Stage A-R rerun lane. Stage A remains the strict endpoint
+baseline; Stage A-R diagnoses whether model-specific structured output and
+reasoning/no-thinking settings improve viability.
+
 Main PC remains the canonical workspace for review, documentation, commit, and push. HP Z2 remains execution-only.
 
 ## Stage A Cells

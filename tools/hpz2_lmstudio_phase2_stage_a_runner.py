@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import statistics
@@ -42,6 +43,20 @@ STATUS_TIMEOUT_SEC = 30
 UNLOAD_TIMEOUT_SEC = 180
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_MAX_TOKENS = 512
+
+
+EXPLAIN_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "citations": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["summary", "citations"],
+    "additionalProperties": False,
+}
 
 
 SMOKE_CARRY_REQUESTS: dict[str, dict[str, Any]] = {
@@ -367,31 +382,135 @@ def import_emr_explain(emr_repo: Path):
     return explain_module, ExplainRequest, scan_output
 
 
+def explain_response_format(mode: str | None) -> dict[str, Any] | None:
+    clean = str(mode or "json_object").strip().lower()
+    if clean in {"none", "off", "false", "disabled"}:
+        return None
+    if clean == "json_schema":
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "explain_response",
+                "strict": True,
+                "schema": EXPLAIN_RESPONSE_SCHEMA,
+            },
+        }
+    if clean == "json_object":
+        return {"type": "json_object"}
+    raise ValueError(f"unsupported response_format mode: {mode}")
+
+
+def extract_first_json_object(text: str) -> str:
+    start = text.find("{")
+    if start < 0:
+        return text
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text[start:], start=start):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return text[start:]
+
+
+def postprocess_llm_text(text: str, modes: list[str]) -> tuple[str, list[str]]:
+    current = str(text or "")
+    applied: list[str] = []
+    for mode in modes:
+        clean = str(mode).strip().lower()
+        if clean == "extract_first_json_object":
+            updated = extract_first_json_object(current)
+        elif clean == "strip_think_blocks":
+            updated = re.sub(r"<think>.*?</think>", "", current, flags=re.DOTALL | re.IGNORECASE)
+        elif clean == "strip_channel_tags":
+            updated = re.sub(r"<\|[^>]+?\|>", "", current)
+            updated = re.sub(r"<channel\|>", "", updated)
+        else:
+            continue
+        if updated != current:
+            applied.append(clean)
+            current = updated.strip()
+    return current, applied
+
+
+def apply_prompt_profile(system: str, prompt: str, options: dict[str, Any]) -> tuple[str, str]:
+    system_parts = [
+        str(options.get("system_prefix", "")).strip(),
+        str(system or "").strip(),
+        str(options.get("system_suffix", "")).strip(),
+    ]
+    user_parts = [
+        str(options.get("user_prefix", "")).strip(),
+        str(prompt or "").strip(),
+        str(options.get("user_suffix", "")).strip(),
+    ]
+    return "\n\n".join(part for part in system_parts if part), "\n\n".join(part for part in user_parts if part)
+
+
+def merged_inference_options(config: dict[str, Any], model: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    options.update(config.get("_inference_profile_defaults", {}))
+    options.update(model.get("inference_options", {}))
+    if args.timeout_seconds is not None:
+        options["timeout_seconds"] = args.timeout_seconds
+    if args.max_tokens is not None:
+        options["max_tokens"] = args.max_tokens
+    if args.temperature is not None:
+        options["temperature"] = args.temperature
+    if args.disable_response_format:
+        options["response_format"] = "none"
+    options.setdefault("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)
+    options.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
+    options.setdefault("temperature", 0.0)
+    options.setdefault("response_format", "json_object")
+    options.setdefault("response_format_fallback", "none")
+    options.setdefault("postprocess", [])
+    return options
+
+
 def chat_completion(
     *,
     server_url: str,
     model: str,
     system: str,
     prompt: str,
-    timeout_seconds: int,
-    max_tokens: int,
-    temperature: float,
-    use_response_format: bool,
+    options: dict[str, Any],
     urlopen: Callable[..., Any] = urllib.request.urlopen,
 ) -> dict[str, Any]:
     url = openai_base_url(server_url) + "/chat/completions"
+    original_system = system
+    original_prompt = prompt
+    system, prompt = apply_prompt_profile(system, prompt, options)
     payload: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
+        "temperature": float(options.get("temperature", 0.0)),
+        "max_tokens": int(options.get("max_tokens", DEFAULT_MAX_TOKENS)),
         "stream": False,
     }
-    if use_response_format:
-        payload["response_format"] = {"type": "json_object"}
+    for key in ("top_p", "top_k", "min_p", "presence_penalty", "frequency_penalty", "repeat_penalty"):
+        if key in options:
+            payload[key] = options[key]
+    response_format = explain_response_format(str(options.get("response_format", "json_object")))
+    if response_format:
+        payload["response_format"] = response_format
 
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
@@ -401,29 +520,34 @@ def chat_completion(
         method="POST",
     )
     started = time.perf_counter()
+    timeout_seconds = int(options.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))
     try:
         body = urlopen(request, timeout=timeout_seconds).read()
         parsed = json.loads(body.decode("utf-8"))
         message = parsed.get("choices", [{}])[0].get("message", {})
+        raw_text = str(message.get("content", "") or "")
+        text, postprocess_applied = postprocess_llm_text(raw_text, [str(item) for item in options.get("postprocess", [])])
         return {
             "status": "ok",
-            "text": str(message.get("content", "") or ""),
+            "text": text,
+            "raw_text": raw_text,
+            "postprocess_applied": postprocess_applied,
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "usage": parsed.get("usage", {}) or {},
         }
     except urllib.error.HTTPError as exc:
         raw_body = exc.read().decode("utf-8", errors="replace")
         lowered = raw_body.lower()
-        if use_response_format and exc.code == 400 and "response_format" in lowered:
+        fallback = str(options.get("response_format_fallback", "none"))
+        if response_format and exc.code == 400 and "response_format" in lowered and fallback != options.get("response_format"):
+            retry_options = dict(options)
+            retry_options["response_format"] = fallback
             return chat_completion(
                 server_url=server_url,
                 model=model,
-                system=system,
-                prompt=prompt,
-                timeout_seconds=timeout_seconds,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                use_response_format=False,
+                system=original_system,
+                prompt=original_prompt,
+                options=retry_options,
                 urlopen=urlopen,
             )
         status = "llm_model_not_found" if exc.code == 404 or "model not found" in lowered else "llm_unavailable"
@@ -449,26 +573,33 @@ def chat_completion(
 def make_lmstudio_generate(
     *,
     server_url: str,
-    timeout_seconds: int,
-    max_tokens: int,
-    temperature: float,
-    use_response_format: bool,
+    runtime_options_by_model: dict[str, dict[str, Any]],
     call_counter: dict[str, int],
 ):
     def generate(*, prompt: str, system: str = "", settings=None, **_: Any) -> dict[str, Any]:
         call_counter["count"] = call_counter.get("count", 0) + 1
         model = str(getattr(settings, "model", "") or "")
-        timeout = int(getattr(settings, "timeout_seconds", timeout_seconds) or timeout_seconds)
-        return chat_completion(
+        options = dict(runtime_options_by_model.get(model, {}))
+        timeout = int(getattr(settings, "timeout_seconds", options.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)) or options.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))
+        options["timeout_seconds"] = timeout
+        result = chat_completion(
             server_url=server_url,
             model=model,
             system=system,
             prompt=prompt,
-            timeout_seconds=timeout,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            use_response_format=use_response_format,
+            options=options,
         )
+        call_counter["last_trace"] = {
+            "model": model,
+            "status": result.get("status"),
+            "latency_ms": result.get("latency_ms"),
+            "usage": result.get("usage", {}),
+            "postprocess_applied": result.get("postprocess_applied", []),
+            "raw_text": result.get("raw_text", ""),
+            "text": result.get("text", ""),
+            "error_message": result.get("error_message", ""),
+        }
+        return result
 
     return generate
 
@@ -537,8 +668,15 @@ def summarize_model_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "expected_ok_case_count": len(expected_ok),
         "status_match_count": sum(1 for case in cases if case.get("status_matches_expected")),
         "citation_present_count": sum(1 for case in expected_ok if case.get("citation_present")),
-        "citation_valid_strict_count": sum(1 for case in expected_ok if case.get("citation_valid_strict")),
+        "citation_valid_strict_count": sum(
+            1 for case in expected_ok if case.get("citation_present") and case.get("citation_valid_strict")
+        ),
         "expected_citation_hit_count": sum(1 for case in expected_ok if not case.get("expected_citations_missing")),
+        "json_parse_failed_count": sum(1 for case in cases if case.get("failure_reason") == "json_parse_failed"),
+        "schema_failed_count": sum(1 for case in cases if case.get("failure_reason") == "schema_failed"),
+        "retrieval_expected_missing_count": sum(
+            1 for case in cases if case.get("failure_reason") == "retrieval_expected_missing"
+        ),
         "phi_hit_count": sum(1 for case in cases if case.get("output_phi_hit")),
         "llm_call_unexpected_count": sum(1 for case in cases if case.get("llm_called") and not case.get("model_call_expected")),
         "warm_p50_wall_ms": int(statistics.median(walls[1:])) if len(walls) > 1 else 0,
@@ -546,17 +684,41 @@ def summarize_model_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def classify_failure_reason(case_result: dict[str, Any]) -> str:
+    if case_result.get("status_matches_expected"):
+        return ""
+    error = str(case_result.get("error_message", ""))
+    if "JSON" in error and ("파싱" in error or "parse" in error.lower()):
+        return "json_parse_failed"
+    if "schema" in error.lower() or "형식" in error:
+        return "schema_failed"
+    if "bracket" in error.lower():
+        return "malformed_citation"
+    if "불일치" in error or "mismatch" in error.lower():
+        return "dropped_citation"
+    expected_missing = set(case_result.get("expected_citations_missing", []) or [])
+    retrieved = set(case_result.get("retrieved_source_ids", []) or [])
+    if expected_missing and expected_missing.isdisjoint(retrieved):
+        return "retrieval_expected_missing"
+    if expected_missing:
+        return "expected_citation_missing"
+    if case_result.get("status") == "citation_failed":
+        return "citation_failed"
+    return "status_mismatch"
+
+
 def validate_config(config: dict[str, Any], eval_set: dict[str, Any], selected_models: list[dict[str, Any]]) -> list[str]:
     errors: list[str] = []
     model_labels = [str(model.get("label", "")) for model in config.get("models", [])]
-    cell_labels = [str(cell.get("model_label", "")) for cell in config.get("stage_a_cells", [])]
+    cell_key = "stage_a_cells" if "stage_a_cells" in config else "stage_ar_cells"
+    cell_labels = [str(cell.get("model_label", "")) for cell in config.get(cell_key, [])]
     if len(model_labels) != len(set(model_labels)):
         errors.append("duplicate model labels")
     if len(cell_labels) != len(set(cell_labels)):
-        errors.append("duplicate stage_a cell model labels")
+        errors.append(f"duplicate {cell_key} model labels")
     missing_models = sorted(set(cell_labels) - set(model_labels))
     if missing_models:
-        errors.append(f"stage_a_cells without model entries: {', '.join(missing_models)}")
+        errors.append(f"{cell_key} without model entries: {', '.join(missing_models)}")
     for model in config.get("models", []):
         if model.get("served_model_id") != model.get("label"):
             errors.append(f"served_model_id != label for {model.get('label')}")
@@ -565,6 +727,11 @@ def validate_config(config: dict[str, Any], eval_set: dict[str, Any], selected_m
     runner = str(config.get("_rag_endpoint", {}).get("runner", ""))
     if runner and not (REPO_ROOT / runner).exists():
         errors.append(f"runner path not found: {runner}")
+    for model in selected_models:
+        try:
+            explain_response_format(str(model.get("inference_options", {}).get("response_format", config.get("_inference_profile_defaults", {}).get("response_format", "json_object"))))
+        except Exception as exc:
+            errors.append(f"{model.get('label')}: invalid response_format: {exc}")
     if not selected_models:
         errors.append("no models selected")
     return errors
@@ -614,22 +781,25 @@ def select_cases(eval_set: dict[str, Any], wanted: list[str] | None) -> list[dic
 
 def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
     RESULTS_DIR.mkdir(exist_ok=True)
-    json_path = RESULTS_DIR / f"hpz2_lmstudio_phase2_stage_a_{timestamp}.json"
-    md_path = RESULTS_DIR / f"hpz2_lmstudio_phase2_stage_a_{timestamp}.md"
+    prefix = str(payload.get("result_prefix", "hpz2_lmstudio_phase2_stage_a"))
+    title = str(payload.get("stage_label", "HP Z2 LM Studio Phase 2 Stage A"))
+    json_path = RESULTS_DIR / f"{prefix}_{timestamp}.json"
+    md_path = RESULTS_DIR / f"{prefix}_{timestamp}.md"
     with json_path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     with md_path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("# HP Z2 LM Studio Phase 2 Stage A\n\n")
+        handle.write(f"# {title}\n\n")
         handle.write(f"- generated_at: {payload['generated_at']}\n")
+        handle.write(f"- stage_label: `{payload.get('stage_label', '')}`\n")
         handle.write(f"- config: `{payload['config']}`\n")
         handle.write(f"- eval_set: `{payload['eval_set']}`\n")
         handle.write(f"- emr_repo: `{payload['emr_repo']}`\n")
         handle.write(f"- lmstudio_server_url: `{payload['server_url']}`\n")
         handle.write(f"- stopped_early: {payload.get('stopped_early', False)}\n\n")
         handle.write("## Model Summary\n\n")
-        handle.write("| model | status | load_s | cases | status match | citations | expected cites | phi hits | warm p50 | warm p95 | error |\n")
-        handle.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
+        handle.write("| model | run | load_s | cases | status match | valid cites | expected cites | json parse fail | retrieval miss | phi hits | warm p50 | warm p95 | error |\n")
+        handle.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
         for row in payload["results"]:
             summary = row.get("summary", {})
             status = "pass" if row.get("success") else "fail"
@@ -641,7 +811,8 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
             handle.write(
                 f"| {row['model_label']} | {status} | {row.get('load_s', '-')} | "
                 f"{summary.get('case_count', 0)} | {status_text} | {citation_text} | "
-                f"{expected_text} | {summary.get('phi_hit_count', 0)} | "
+                f"{expected_text} | {summary.get('json_parse_failed_count', 0)} | "
+                f"{summary.get('retrieval_expected_missing_count', 0)} | {summary.get('phi_hit_count', 0)} | "
                 f"{summary.get('warm_p50_wall_ms', 0)} | {summary.get('warm_p95_wall_ms', 0)} | {error} |\n"
             )
         handle.write("\n## Case Details\n\n")
@@ -652,7 +823,8 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
                 handle.write(
                     f"- `{case['case_id']}` status={case['status']} expected={case['expected_status']} "
                     f"wall_ms={case['wall_ms']} citations={case['citation_count']} "
-                    f"missing_expected={missing} phi_hit={case['output_phi_hit']}\n"
+                    f"missing_expected={missing} failure={case.get('failure_reason') or '-'} "
+                    f"phi_hit={case['output_phi_hit']}\n"
                 )
             handle.write("\n")
     return json_path, md_path
@@ -666,9 +838,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--emr-repo", default=None)
     parser.add_argument("--models", nargs="*")
     parser.add_argument("--case-ids", nargs="*")
-    parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
-    parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
-    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--timeout-seconds", type=int, default=None)
+    parser.add_argument("--max-tokens", type=int, default=None)
+    parser.add_argument("--temperature", type=float, default=None)
     parser.add_argument("--skip-estimate", action="store_true")
     parser.add_argument("--disable-response-format", action="store_true")
     parser.add_argument("--pacing-scale", type=float, default=1.0)
@@ -681,10 +853,14 @@ def parse_args() -> argparse.Namespace:
 def dry_run_report(config: dict[str, Any], eval_set: dict[str, Any], models: list[dict[str, Any]], cases: list[dict[str, Any]]) -> int:
     errors = validate_config(config, eval_set, models)
     errors.extend(validate_case_payloads(cases, dict(eval_set.get("common_options_default", {}))))
-    print("HP Z2 LM Studio Phase 2 Stage A dry-run")
+    print(f"{config.get('_stage_label', 'HP Z2 LM Studio Phase 2 Stage A')} dry-run")
     print(f"models: {len(models)}")
     for model in models:
-        print(f"  - {model['label']} -> {model['lms_key']}")
+        profile = model.get("inference_options", {}).get("profile", "strict-baseline")
+        response_format = model.get("inference_options", {}).get(
+            "response_format", config.get("_inference_profile_defaults", {}).get("response_format", "json_object")
+        )
+        print(f"  - {model['label']} -> {model['lms_key']} [{profile}, {response_format}]")
     print(f"cases: {len(cases)}")
     print(f"hold_models: {len(config.get('hold_models', []))}")
     pacing = config.get("_execution_pacing", {})
@@ -739,12 +915,13 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
     cli_args_default = normalize_cli_args(config.get("_load_profile", {}).get("lms_cli_args"))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     call_counter = {"count": 0}
+    runtime_options_by_model = {
+        str(model.get("served_model_id") or model.get("label")): merged_inference_options(config, model, args)
+        for model in models
+    }
     explain_module.generate_llm = make_lmstudio_generate(
         server_url=server_url,
-        timeout_seconds=args.timeout_seconds,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        use_response_format=not args.disable_response_format,
+        runtime_options_by_model=runtime_options_by_model,
         call_counter=call_counter,
     )
 
@@ -753,6 +930,8 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
         "config": args.config,
         "eval_set": args.eval_set,
         "server_url": server_url,
+        "stage_label": config.get("_stage_label", "HP Z2 LM Studio Phase 2 Stage A"),
+        "result_prefix": config.get("_result_artifact_prefix", "hpz2_lmstudio_phase2_stage_a"),
         "emr_repo": str(emr_repo),
         "emr_git_status": emr_status,
         "host": {
@@ -772,12 +951,14 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
         served_model_id = str(model.get("served_model_id") or label)
         load_options = dict(model.get("load_options", {}))
         cli_args = normalize_cli_args(model.get("lms_cli_args", cli_args_default))
+        runtime_options = runtime_options_by_model[served_model_id]
         row: dict[str, Any] = {
             "model_label": label,
             "lms_key": key,
             "served_model_id": served_model_id,
             "role": model.get("_role", ""),
             "load_options": load_options,
+            "inference_options": runtime_options,
             "lms_cli_args": cli_args,
             "cases": [],
         }
@@ -820,12 +1001,13 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
         os.environ["EMR_LLM_PROVIDER"] = "ollama"
         os.environ["EMR_LLM_MODEL"] = served_model_id
         os.environ["EMR_LLM_HOST"] = settings_host
-        os.environ["EMR_LLM_TIMEOUT_SECONDS"] = str(args.timeout_seconds)
+        os.environ["EMR_LLM_TIMEOUT_SECONDS"] = str(runtime_options.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS))
 
         for case in cases:
             case_id = str(case.get("id", ""))
             request_payload = case_payload(case, common_options)
             before_calls = call_counter.get("count", 0)
+            call_counter["last_trace"] = {}
             started = time.perf_counter()
             response_error = ""
             try:
@@ -841,6 +1023,7 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
                 }
             wall_ms = int((time.perf_counter() - started) * 1000)
             after_calls = call_counter.get("count", 0)
+            trace = call_counter.get("last_trace") if after_calls > before_calls else {}
             expected_status = str(case.get("expected_status", "ok"))
             model_call_expected = bool(case.get("model_call_expected", True))
             expected_citations = [
@@ -849,6 +1032,7 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
                 if str(source_id) and not str(source_id).startswith("{TBD")
             ]
             citation_issues = returned_citation_issues(response)
+            citation_count = len(response.get("citations", []) or [])
             case_result = {
                 "case_id": case_id,
                 "expected_status": expected_status,
@@ -858,10 +1042,10 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
                 "llm_called": after_calls > before_calls,
                 "wall_ms": wall_ms,
                 "latency_ms": response.get("latency_ms"),
-                "citation_count": len(response.get("citations", []) or []),
+                "citation_count": citation_count,
                 "retrieved_count": len(response.get("retrieved", []) or []),
-                "citation_present": bool(response.get("citations")),
-                "citation_valid_strict": not citation_issues,
+                "citation_present": citation_count > 0,
+                "citation_valid_strict": citation_count > 0 and not citation_issues,
                 "invalid_returned_citations": citation_issues,
                 "expected_citations_missing": expected_citations_missing(response, expected_citations),
                 "output_phi_hit": output_phi_hit(response, scan_output),
@@ -878,6 +1062,28 @@ def run_stage_a(args: argparse.Namespace, config: dict[str, Any], eval_set: dict
                     if isinstance(item, dict)
                 ],
             }
+            case_result["failure_reason"] = classify_failure_reason(case_result)
+            if trace:
+                case_result["llm_trace"] = {
+                    "status": trace.get("status"),
+                    "latency_ms": trace.get("latency_ms"),
+                    "usage": trace.get("usage", {}),
+                    "postprocess_applied": trace.get("postprocess_applied", []),
+                    "error_message": trace.get("error_message", ""),
+                }
+                if runtime_options.get("capture_raw_text_preview"):
+                    raw_text = str(trace.get("raw_text", ""))
+                    processed_text = str(trace.get("text", ""))
+                    case_result["llm_raw_text_preview"] = (
+                        "<redacted: phi-like output>"
+                        if scan_output(raw_text)[0]
+                        else raw_text[:1000]
+                    )
+                    case_result["llm_processed_text_preview"] = (
+                        "<redacted: phi-like output>"
+                        if scan_output(processed_text)[0]
+                        else processed_text[:1000]
+                    )
             row["cases"].append(case_result)
             print(
                 "  {case_id}: status={status} expected={expected} wall={wall_ms}ms cites={cites} phi={phi}".format(

@@ -1,0 +1,392 @@
+{
+  "version": "0.1-stage-ar",
+  "status": "R0.1 Stage A-R model-aware RAG config patch only. Preserves Stage A strict baseline; no model execution has been run from this config.",
+  "_scope": "RAG-aware Phase 2.2 Stage A-R model-aware rerun config for EMR_AI_24clinic /explain. Uses model-specific structured-output and reasoning/no-thinking profiles; does not replace the Stage A strict baseline.",
+  "_official_execution_host": "HP Z2 Mini G1a",
+  "_canonical_workspace": "Main PC keeps source-of-truth docs, commits, and pushes. HP Z2 is execution-only runner.",
+  "_hard_stops": [
+    "Do not run this config unless the user explicitly issues Phase 2 Stage A-R heavy run GO.",
+    "Do not write to EMR_AI_24clinic source/code from this config patch.",
+    "Do not commit or push without explicit user GO.",
+    "Do not treat Stage A-R as replacing Stage A strict endpoint baseline; compare both.",
+    "Do not run Stage B top_k, Stage C prompt-tone, or chunk variation without separate GO."
+  ],
+  "_backend": {
+    "provider": "lm_studio",
+    "runtime": "llama.cpp Vulkan",
+    "server_url_default": "http://127.0.0.1:1234/v1",
+    "server_lan_url_observed": "http://192.168.68.50:1234/v1",
+    "_note": "LM Studio server URL is for the LLM backend lane. The /explain app endpoint host is runner-specific and must be supplied by the heavy-run runner."
+  },
+  "_rag_endpoint": {
+    "app_repo": "../EMR_AI_24clinic",
+    "path": "/explain",
+    "eval_set": "prompts/rag_aware_eval_set_v0.1.json",
+    "runner": "tools/hpz2_lmstudio_phase2_stage_a_runner.py",
+    "mode": "rag_endpoint_model_aware",
+    "case_count": 15,
+    "model_call_expected_cases": 14,
+    "phi_early_return_case": "RA-04-PHI-input-stress",
+    "common_options_default": {
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false
+    }
+  },
+  "_load_profile": {
+    "gpu": "max",
+    "context_length": 4096,
+    "ttl": 3600,
+    "parallel": 1,
+    "estimate_before_load": true,
+    "lms_cli_args": [
+      "-y"
+    ],
+    "_note": "Stage A-R keeps models loaded longer during diagnosis; runner still unloads between models for fair isolated cells. The -y CLI arg avoids interactive multiple-match prompts."
+  },
+  "_execution_pacing": {
+    "unload_all_before_each_model": true,
+    "unload_all_after_each_model": true,
+    "require_lms_status_no_models_loaded_before_next_load": true,
+    "post_load_settle_sec": 10,
+    "post_unload_cooldown_sec": 90,
+    "post_large_model_cooldown_sec": 180,
+    "post_failure_cooldown_sec": 180,
+    "large_model_labels": [
+      "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "hpz2-lms-gemma-4-31b-rag",
+      "hpz2-lms-gpt-oss-120b-rag"
+    ],
+    "_note": "Future heavy-run runner should not immediately load the next model after a long load/unload. Wait for LM Studio to report no loaded models, then apply the cooldown before continuing."
+  },
+  "_stage_policy": [
+    "Stage A-R is a model-aware rerun: same 15 cases and RAG retrieval settings as Stage A, but model-specific inference profiles are enabled.",
+    "Stage A strict baseline remains the endpoint-readiness baseline. Stage A-R diagnoses whether model-aware integration can rescue format-sensitive models.",
+    "Qwen profiles use non-thinking JSON mode for concise RAG explanations.",
+    "gpt-oss profiles use structured output plus explicit reasoning effort hints.",
+    "Granite profile emphasizes RAG/extraction/instruction following with low sampling.",
+    "Gemma profile uses its documented sampling family plus JSON schema and channel/tag cleanup for diagnosis.",
+    "Use execution pacing between all models; especially after qwen3.6-35b-a3b, gemma-4-31b, and gpt-oss-120b."
+  ],
+  "models": [
+    {
+      "label": "hpz2-lms-qwen3-14b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-14b",
+      "served_model_id": "hpz2-lms-qwen3-14b-rag",
+      "_role": "primary small-dense RAG candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "qwen3-nonthinking-json-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "max_tokens": 1024,
+        "system_suffix": "Use Qwen non-thinking mode for this short RAG citation task. Output only the final JSON object. /no_think",
+        "user_suffix": "/no_think",
+        "postprocess": [
+          "strip_think_blocks",
+          "extract_first_json_object"
+        ],
+        "_rationale": "Qwen3 official guidance separates thinking and non-thinking modes; short JSON RAG answers should use non-thinking settings."
+      }
+    },
+    {
+      "label": "hpz2-lms-qwen3-8b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3-8b",
+      "served_model_id": "hpz2-lms-qwen3-8b-rag",
+      "_role": "fallback / low-resource RAG candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "qwen3-nonthinking-json-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "max_tokens": 1024,
+        "system_suffix": "Use Qwen non-thinking mode for this short RAG citation task. Output only the final JSON object. /no_think",
+        "user_suffix": "/no_think",
+        "postprocess": [
+          "strip_think_blocks",
+          "extract_first_json_object"
+        ],
+        "_rationale": "Qwen3 official guidance separates thinking and non-thinking modes; short JSON RAG answers should use non-thinking settings."
+      }
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-20b-rag",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-20b",
+      "served_model_id": "hpz2-lms-gpt-oss-20b-rag",
+      "_role": "direct RAG endpoint comparison candidate",
+      "_smoke_status": "PASS in HP Z2 LM Studio retry baseline after non-interactive -y resolution",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "gpt-oss-low-reasoning-structured-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.0,
+        "max_tokens": 768,
+        "system_prefix": "Reasoning: low",
+        "_rationale": "gpt-oss-20b is the lower-latency local/specialized candidate; low reasoning plus schema should favor concise structured RAG output."
+      }
+    },
+    {
+      "label": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "served_model_id": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "_role": "large challenger",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "qwen3.6-nonthinking-json-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0,
+        "max_tokens": 2048,
+        "timeout_seconds": 420,
+        "system_suffix": "Use Qwen non-thinking mode for this short RAG citation task. Output only the final JSON object. /no_think",
+        "user_suffix": "/no_think",
+        "postprocess": [
+          "strip_think_blocks",
+          "extract_first_json_object"
+        ],
+        "_rationale": "Qwen3.6 is optimized for agentic/long-context work, but this RAG endpoint needs concise structured output; non-thinking JSON mode isolates its useful instruction-following ability."
+      }
+    },
+    {
+      "label": "hpz2-lms-granite-4.1-30b-rag",
+      "provider": "lm_studio",
+      "lms_key": "ibm/granite-4.1-30b",
+      "served_model_id": "hpz2-lms-granite-4.1-30b-rag",
+      "_role": "secondary 30B comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "granite-rag-extraction-json",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "max_tokens": 768,
+        "_rationale": "Granite 4.1 advertises RAG, QA, extraction, multilingual, and function-calling use cases; low sampling favors extraction-like citation adherence."
+      }
+    },
+    {
+      "label": "hpz2-lms-gemma-4-31b-rag",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-31b",
+      "served_model_id": "hpz2-lms-gemma-4-31b-rag",
+      "_role": "secondary dense quality/safety wording comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "gemma4-standard-json-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64,
+        "max_tokens": 1024,
+        "timeout_seconds": 420,
+        "system_suffix": "Do not emit thought/channel tags. Output only the final JSON object that matches the schema.",
+        "postprocess": [
+          "strip_channel_tags",
+          "extract_first_json_object"
+        ],
+        "_rationale": "Gemma 4 official sampling guidance uses temperature 1.0/top_p 0.95/top_k 64; schema and tag cleanup diagnose whether integration can handle its channel-style output."
+      }
+    },
+    {
+      "label": "hpz2-lms-gpt-oss-120b-rag",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-120b",
+      "served_model_id": "hpz2-lms-gpt-oss-120b-rag",
+      "_role": "large gpt-oss comparison candidate added by user request",
+      "_smoke_status": "PASS in HP Z2 LM Studio smoke baseline; load_s about 100.666",
+      "load_options": {
+        "gpu": "max",
+        "context_length": 4096,
+        "ttl": 3600
+      },
+      "inference_options": {
+        "profile": "gpt-oss-medium-reasoning-structured-rag",
+        "response_format": "json_schema",
+        "response_format_fallback": "json_object",
+        "temperature": 0.0,
+        "max_tokens": 1024,
+        "timeout_seconds": 420,
+        "system_prefix": "Reasoning: medium",
+        "_rationale": "gpt-oss-120b is the high-reasoning quality candidate; medium reasoning preserves nuance while schema constrains the final RAG output."
+      }
+    }
+  ],
+  "hold_models": [],
+  "version_log": [
+    {
+      "version": "R0",
+      "date": "2026-05-24",
+      "change": "Initial Phase 2 Stage A LM Studio config patch after HP Z2 smoke baseline and RA-03 user resolution. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.1 gpt-oss-120b target add",
+      "date": "2026-05-24",
+      "change": "Added openai/gpt-oss-120b as a Phase 2 Stage A RAG endpoint test target by user request. Removed it from hold_models; granite-4.1-30b and gemma-4-31b remain HOLD. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.2 all smoke-pass targets + pacing",
+      "date": "2026-05-24",
+      "change": "Added ibm/granite-4.1-30b and google/gemma-4-31b as Phase 2 Stage A RAG endpoint test targets by user request. hold_models is now empty. Added execution pacing policy: require unload/no-models status before next load, 90s default post-unload cooldown, 180s cooldown after large models or failures, and 10s post-load settle. Config only: heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X."
+    },
+    {
+      "version": "R0.3 runner binding",
+      "date": "2026-05-24",
+      "change": "Bound Stage A config to tools/hpz2_lmstudio_phase2_stage_a_runner.py and corrected app_repo path relative to local-llm-eval repo root. Runner-side LM Studio adapter keeps EMR_AI_24clinic read-only. Patch/validation only: heavy run X / model execution X / EMR_AI_24clinic write X."
+    },
+    {
+      "version": "R0.1 Stage A-R model-aware profiles",
+      "date": "2026-05-24",
+      "change": "Added model-aware inference profiles for Stage A-R: JSON schema structured output for all models; Qwen non-thinking /no_think profile; gpt-oss reasoning hints; Granite RAG extraction profile; Gemma documented sampling + channel cleanup. New config only: model execution X / EMR_AI_24clinic source write X / commit X / push X."
+    }
+  ],
+  "_stage_label": "HP Z2 LM Studio Phase 2 Stage A-R Model-Aware RAG",
+  "_result_artifact_prefix": "hpz2_lmstudio_phase2_stage_ar",
+  "_inference_profile_defaults": {
+    "response_format": "json_schema",
+    "response_format_fallback": "json_object",
+    "timeout_seconds": 300,
+    "max_tokens": 1024,
+    "temperature": 0.0,
+    "capture_raw_text_preview": true,
+    "_note": "JSON schema is used because LM Studio supports schema-constrained structured output. Raw previews are redacted if PHI-like output is detected."
+  },
+  "stage_ar_cells": [
+    {
+      "cell_id": "stageAR-qwen3-14b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-qwen3-14b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "primary small-dense RAG candidate"
+    },
+    {
+      "cell_id": "stageAR-qwen3-8b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-qwen3-8b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "fallback / low-resource RAG candidate"
+    },
+    {
+      "cell_id": "stageAR-gpt-oss-20b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-gpt-oss-20b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "direct RAG endpoint comparison candidate"
+    },
+    {
+      "cell_id": "stageAR-qwen3.6-35b-a3b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-qwen3.6-35b-a3b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "large challenger"
+    },
+    {
+      "cell_id": "stageAR-granite-4.1-30b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-granite-4.1-30b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "secondary 30B comparison candidate added by user request"
+    },
+    {
+      "cell_id": "stageAR-gemma-4-31b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-gemma-4-31b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "secondary dense quality/safety wording comparison candidate added by user request"
+    },
+    {
+      "cell_id": "stageAR-gpt-oss-120b-rag",
+      "stage": "A-R",
+      "mode": "rag_endpoint_model_aware",
+      "model_label": "hpz2-lms-gpt-oss-120b-rag",
+      "required": true,
+      "top_k": 5,
+      "min_similarity": 0.45,
+      "lexical_rerank": false,
+      "prompt_tone": "Fix v3 current + model-aware structured output profile",
+      "chunk_baseline": "current Phase 1c RAG index",
+      "_role": "large gpt-oss comparison candidate added by user request"
+    }
+  ]
+}

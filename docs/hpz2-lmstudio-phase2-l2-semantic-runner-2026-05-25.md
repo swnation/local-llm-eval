@@ -89,6 +89,27 @@ python tools\hpz2_lmstudio_phase2_l2_semantic_runner.py `
 The recommended default tier is `l2_initial_6`. Other configured tiers are
 `fast_daily`, `quality`, `reference`, `duplicate_review`, and `all`.
 
+## Pacing Enforcement
+
+The runner enforces `_execution_pacing` from the config during real execution:
+
+- before the run and before every model load, it runs `lms unload --all`,
+  waits until `lms status` reports no loaded models, and checks the configured
+  `C:\` free-space floor;
+- after every model, it unloads all models, waits for no loaded models, checks
+  free space again, and then sleeps before the next model;
+- for normal post-model cleanup, the cooldown is `post_unload_cooldown_sec`;
+- for a configured large model or a model-level failure, the cooldown is the
+  max of `post_unload_cooldown_sec`, `post_large_model_cooldown_sec`, and/or
+  `post_failure_cooldown_sec`, not a blind retry loop;
+- on estimate, load, or generation failure, it records the recovery action,
+  unloads, checks no-loaded-model state and free space, sleeps the failure
+  cooldown, and continues only if the recovery gate passes.
+
+The JSON artifact records pre-run, pre-model, post-model, and failure-recovery
+gate evidence. The Markdown artifact includes the pacing settings and pre-run
+gate summary.
+
 ## Output
 
 When executed on HP Z2 with a separate GO, artifacts are written under

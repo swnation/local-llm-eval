@@ -47,6 +47,8 @@
     "post_unload_cooldown_sec": 90,
     "post_large_model_cooldown_sec": 180,
     "post_failure_cooldown_sec": 180,
+    "free_space_path": "C:\\",
+    "free_space_floor_gib": 100,
     "large_model_labels": [
       "hpz2-l2-openai-gpt-oss-120b",
       "hpz2-l2-qwen35-122b-a10b-mtp",

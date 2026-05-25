@@ -5,7 +5,7 @@ type: progress-tracking
 status: live
 version: 0.1
 created: 2026-05-25
-updated: 2026-05-25
+updated: 2026-05-26
 scope: Single source of truth for HP Z2 Phase 2 L0-L5 ladder progress
 related:
   - docs/rag-goals-evaluation-principles-v0.1.md
@@ -53,11 +53,11 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / L2 runner built locally / L2 execution blocked-by-commit-and-HP-dry-run |
-| Current repo HEAD | `f3d0a9e` (`docs(rag): apply R2 pre-L2 update`) before this uncommitted L2 runner build |
-| Current tracker status | live R2, L2 semantic runner/config/docs complete in working tree |
-| Next recommended GO | `Phase 2 L2 semantic runner commit/push GO` |
-| L2 blocker | commit/push + HP Z2 pull/dry-run + separate L2 semantic smoke matrix GO |
+| Current level | L0 complete / L1 complete / L2 runner committed / HP dry-run complete / L2 execution blocked-by-pacing-enforcement patch |
+| Current repo HEAD | `56f772e` (`feat(rag): add HP Z2 Phase 2 L2 semantic smoke runner`) before this uncommitted pacing enforcement patch |
+| Current tracker status | live R3 working tree, L2 semantic runner pacing enforcement patch in progress |
+| Next recommended GO | `Phase 2 L2 runner pacing enforcement review GO` |
+| L2 blocker | pacing enforcement patch review + commit/push + HP Z2 pull/dry-run + separate L2 semantic smoke matrix GO |
 | L3 blocker | runner-side normalizer feasibility prototype |
 | L5 hard blocker | RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
@@ -69,7 +69,7 @@ Rules:
 |---|---|---|---|---|---|---|
 | L0 inventory | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | complete |
 | L1 source verification | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | use source matrix for model-axis catalog |
-| L2 semantic smoke | blocked-by-commit-and-HP-dry-run | - | local dry-run validation complete on Main PC | - | - | requires commit/push, HP Z2 pull/dry-run, then separate L2 execution GO |
+| L2 semantic smoke | blocked-by-pacing-enforcement-patch | 2026-05-26 | HP Z2 preflight STOP before execution; pacing was not enforced by pinned runner | - | pending Main PC review | requires pacing patch review, commit/push, HP Z2 pull/dry-run, then separate L2 execution GO |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 real endpoint | blocked-hard | - | - | - | - | requires RA-03 checks + sufficient L2-L4 evidence + `Phase 2 heavy run GO` |
@@ -80,7 +80,8 @@ Rules:
 |---|---|---|---|---|
 | Phase 2.1 design R1 -> R2 update | 4-lane mapping, scorer P7 placeholder rejection fix, acceptable citation set, model-axis catalog, C1-C7 hooks | complete-committed | required before L2 | Main PC Codex |
 | Stage A-R lane reinterpretation | Reclassify existing Stage A-R / ModelOps results under 4 lanes and L0-L5 ladder | pending | useful before L2 comparisons | Main PC Codex |
-| Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | complete-in-working-tree | required before L2 | Main PC Codex |
+| Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | complete-committed | required before L2 | Main PC Codex |
+| L2 runner pacing enforcement | Enforce no-loaded-model, cooldown, failure recovery, and C: free-space gates from `_execution_pacing` | in-working-tree | required before L2 execution | Main PC Codex |
 | Normalizer adapter prototype | Runner-side only, eval scope, no EMR production write | pending | required before L3 | Main PC Codex |
 | L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | complete | safe first execution step | HP Z2 Codex |
 | RA-03 user-owned checks | Final input/citation/user-verdict checks required before real endpoint | pending | hard blocker before L5 | User |
@@ -94,6 +95,7 @@ Rules:
 | `Phase 2.1 design R1 -> R2 update GO` | Update design/eval docs with 4-lane mapping, scorer fix, acceptable citation set, model catalog, and C1-C7 hooks | design R2 diff/report | no heavy eval, no EMR write |
 | `HP Z2 semantic-first runner build GO` | Implement eval-only runner support for semantic fields and v0.2 metric hooks | tools/config docs + dry-run evidence | no `/explain`, no EMR write |
 | `Phase 2 L2 semantic runner commit/push GO` | Commit and push L2 semantic runner/config/docs/tracker updates | synced Main PC `origin/main` | no model execution, no `/explain`, no EMR write |
+| `Phase 2 L2 runner pacing enforcement patch GO` | Enforce L2 runner `_execution_pacing`, free-space, no-loaded-model, and recovery gates | runner/config/runbook/tracker diff + validation | no model execution, no LM Studio API calls, no `/explain`, no EMR write |
 | `HP Z2 L2 semantic smoke matrix GO` | Synthetic LM Studio-only semantic smoke over approved Tier models | L2 result packet + §5 archive entry | no real `/explain`; maintain C: >= 100 GB |
 | `HP Z2 L3 normalizer feasibility GO` | Runner-side conversion of model output to `{summary, citations}` | L3 result packet + normalizer notes | no production normalizer change |
 | `HP Z2 L4 native contract check GO` | Strict JSON/schema convenience check | L4 result packet | native contract does not override semantic gate |
@@ -140,17 +142,19 @@ Append new result entries below. Keep old entries intact.
 
 ### L2 semantic smoke matrix
 
-- Status: blocked-by-commit-and-HP-dry-run
-- GO issued: -
+- Status: blocked-by-pacing-enforcement-patch
+- GO issued: `HP Z2 L2 semantic smoke matrix GO` reached preflight only; execution STOP before model load
 - Artifact: -
 - Required before entry:
   - L0/L1 reviewed: complete
   - design R2 updated: complete committed at `f3d0a9e`
-  - semantic-first runner built or selected: complete in working tree
+  - semantic-first runner built or selected: complete committed at `56f772e`
   - Main PC dry-run validation: complete, no lms/model/API/app calls
-  - HP Z2 pull/dry-run validation: pending
-- Reviewer verdict: -
-- Next GO: `Phase 2 L2 semantic runner commit/push GO`
+  - HP Z2 pull/dry-run validation: complete
+  - HP Z2 pre-execution review continuation: GO
+  - HP Z2 execution attempt: STOP before model execution because pinned runner did not enforce `_execution_pacing`
+- Reviewer verdict: pacing patch required before execution
+- Next GO: `Phase 2 L2 runner pacing enforcement review GO`
 
 ### L3 normalizer feasibility
 
@@ -210,3 +214,4 @@ Append new result entries below. Keep old entries intact.
 | R0 | 2026-05-25 | Initial L0-L5 progress tracker. Snapshot all levels pending/blocked, added parallel tracks, GO carry, result archive placeholders, and STOP carry. |
 | R1 | 2026-05-25 | Incorporated HP Z2 L0/L1 inventory and source verification results from `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323`; marked L0/L1 complete, corrected current HEAD snapshot, and set next GO to semantic-first runner build before L2. |
 | R2 | 2026-05-25 | Added L2 synthetic semantic runner/config/runbook tracking. Main PC dry-run validation passed without lms commands, model loads, LM Studio API calls, production app calls, or EMR writes. L2 execution remains blocked until commit/push, HP Z2 pull/dry-run, and separate L2 semantic smoke matrix GO. |
+| R3 | 2026-05-26 | Recorded HP Z2 pre-execution STOP before model load because pinned L2 runner did not enforce `_execution_pacing`; added working-tree pacing enforcement patch tracking. |

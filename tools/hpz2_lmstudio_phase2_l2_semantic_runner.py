@@ -122,8 +122,91 @@ def lms_status(lms_exe: str) -> dict[str, Any]:
     return run_cmd([lms_exe, "status"], timeout=STATUS_TIMEOUT_SEC)
 
 
+def lms_status_has_no_models(status: dict[str, Any]) -> bool:
+    if status.get("returncode") != 0:
+        return False
+    text = f"{status.get('stdout', '')}\n{status.get('stderr', '')}".lower()
+    return "no models loaded" in text or "no loaded models" in text
+
+
+def wait_for_no_models(lms_exe: str, timeout_sec: int = 120, poll_sec: int = 5) -> dict[str, Any]:
+    deadline = time.perf_counter() + timeout_sec
+    last = lms_status(lms_exe)
+    while time.perf_counter() < deadline:
+        if lms_status_has_no_models(last):
+            return last
+        time.sleep(poll_sec)
+        last = lms_status(lms_exe)
+    return last
+
+
 def unload_all(lms_exe: str) -> dict[str, Any]:
     return run_cmd([lms_exe, "unload", "--all"], timeout=UNLOAD_TIMEOUT_SEC)
+
+
+def disk_free_info(pacing: dict[str, Any]) -> dict[str, Any]:
+    path = str(pacing.get("free_space_path", "C:\\"))
+    floor_gib = float(pacing.get("free_space_floor_gib", pacing.get("free_space_floor_gb", 100)))
+    usage = shutil.disk_usage(path)
+    free_gib = usage.free / (1024 ** 3)
+    return {
+        "path": path,
+        "free_bytes": usage.free,
+        "free_gib": round(free_gib, 3),
+        "floor_gib": floor_gib,
+        "pass": free_gib >= floor_gib,
+    }
+
+
+def sleep_cooldown(seconds: int | float, reason: str) -> dict[str, Any]:
+    delay = max(0.0, float(seconds or 0))
+    event = {
+        "reason": reason,
+        "requested_sec": delay,
+        "slept_sec": delay,
+    }
+    if delay <= 0:
+        return event
+    print(f"  wait {delay:.1f}s: {reason}", flush=True)
+    time.sleep(delay)
+    return event
+
+
+def cooldown_seconds_for_model(pacing: dict[str, Any], model_label: str, failed: bool) -> tuple[float, str]:
+    candidates = [float(pacing.get("post_unload_cooldown_sec", 0) or 0)]
+    reasons = ["post_unload"]
+    if model_label in set(str(label) for label in pacing.get("large_model_labels", [])):
+        candidates.append(float(pacing.get("post_large_model_cooldown_sec", 0) or 0))
+        reasons.append("large_model")
+    if failed:
+        candidates.append(float(pacing.get("post_failure_cooldown_sec", 0) or 0))
+        reasons.append("failure")
+    return max(candidates), "max(" + ",".join(reasons) + ")"
+
+
+def pacing_gate(
+    lms_exe: str,
+    pacing: dict[str, Any],
+    phase: str,
+    *,
+    do_unload: bool,
+    cooldown_sec: int | float = 0,
+    cooldown_reason: str = "",
+) -> dict[str, Any]:
+    event: dict[str, Any] = {
+        "phase": phase,
+        "unload_requested": do_unload,
+    }
+    if do_unload:
+        event["unload"] = unload_all(lms_exe)
+    event["unload_success"] = (not do_unload) or event.get("unload", {}).get("returncode") == 0
+    event["lms_status"] = wait_for_no_models(lms_exe)
+    event["no_models_loaded"] = lms_status_has_no_models(event["lms_status"])
+    event["free_space"] = disk_free_info(pacing)
+    event["pass"] = event["unload_success"] and event["no_models_loaded"] and bool(event["free_space"].get("pass"))
+    if event["pass"] and float(cooldown_sec or 0) > 0:
+        event["cooldown"] = sleep_cooldown(cooldown_sec, cooldown_reason or phase)
+    return event
 
 
 def estimate_model(lms_exe: str, model_key: str, load_options: dict[str, Any], cli_args: list[str]) -> dict[str, Any]:
@@ -429,11 +512,29 @@ def validate_config(config: dict[str, Any], eval_set: dict[str, Any], models: li
         errors.append("config _l2_semantic_smoke.mode must be l2_synthetic_semantic_smoke")
     if "/explain" in json.dumps(config.get("_l2_semantic_smoke", {}), ensure_ascii=False).lower():
         errors.append("L2 config must not include /explain execution scope")
+    pacing = config.get("_execution_pacing", {})
+    if not isinstance(pacing, dict):
+        errors.append("config _execution_pacing must be an object")
+        pacing = {}
+    for key in ("post_unload_cooldown_sec", "post_large_model_cooldown_sec", "post_failure_cooldown_sec"):
+        try:
+            if float(pacing.get(key, 0)) < 0:
+                errors.append(f"_execution_pacing.{key} must be non-negative")
+        except (TypeError, ValueError):
+            errors.append(f"_execution_pacing.{key} must be numeric")
+    try:
+        if float(pacing.get("free_space_floor_gib", pacing.get("free_space_floor_gb", 100))) < 100:
+            errors.append("_execution_pacing free-space floor must be >= 100 GiB")
+    except (TypeError, ValueError):
+        errors.append("_execution_pacing free-space floor must be numeric")
 
     labels = [str(model.get("label", "")) for model in config.get("models", [])]
     if len(labels) != len(set(labels)):
         errors.append("model labels must be unique")
     label_set = set(labels)
+    for label in pacing.get("large_model_labels", []):
+        if str(label) not in label_set:
+            errors.append(f"_execution_pacing.large_model_labels references unknown label: {label}")
     default_tier = str(config.get("_default_tier", "default"))
     if default_tier != "all" and default_tier not in config.get("_model_tiers", {}):
         errors.append(f"config _default_tier not found in _model_tiers: {default_tier}")
@@ -492,19 +593,20 @@ def validate_config(config: dict[str, Any], eval_set: dict[str, Any], models: li
 
 def select_models(config: dict[str, Any], wanted: list[str] | None, tier: str | None) -> list[dict[str, Any]]:
     models = list(config.get("models", []))
+    models_by_label = {str(model.get("label", "")): model for model in models}
     if wanted:
-        wanted_set = set(wanted)
+        wanted_order = [str(label) for label in wanted]
     else:
         tier_name = tier or str(config.get("_default_tier", "default"))
         tiers = config.get("_model_tiers", {})
         if tier_name == "all":
-            wanted_set = {str(model.get("label", "")) for model in models}
+            wanted_order = [str(model.get("label", "")) for model in models]
         else:
-            wanted_set = set(tiers.get(tier_name, []))
-            if not wanted_set:
+            wanted_order = [str(label) for label in tiers.get(tier_name, [])]
+            if not wanted_order:
                 raise ValueError(f"unknown or empty model tier: {tier_name}")
-    selected = [model for model in models if model.get("label") in wanted_set]
-    missing = sorted(wanted_set - {str(model.get("label", "")) for model in selected})
+    selected = [models_by_label[label] for label in wanted_order if label in models_by_label]
+    missing = sorted(set(wanted_order) - {str(model.get("label", "")) for model in selected})
     if missing:
         raise ValueError(f"unknown model labels: {', '.join(missing)}")
     return selected
@@ -664,6 +766,11 @@ def dry_run_report(config: dict[str, Any], eval_set: dict[str, Any], models: lis
     print(f"lanes: {', '.join(sorted(eval_set.get('evaluation_lanes', {}).keys()))}")
     print(f"placeholder_policy: {eval_set.get('placeholder_policy', {}).get('id')}")
     print(f"metric_hooks: {len(eval_set.get('r2_metric_hooks', {}))}")
+    pacing = config.get("_execution_pacing", {})
+    print(f"post_unload_cooldown_sec: {pacing.get('post_unload_cooldown_sec')}")
+    print(f"post_large_model_cooldown_sec: {pacing.get('post_large_model_cooldown_sec')}")
+    print(f"post_failure_cooldown_sec: {pacing.get('post_failure_cooldown_sec')}")
+    print(f"free_space_floor_gib: {pacing.get('free_space_floor_gib', pacing.get('free_space_floor_gb', 100))}")
     if errors:
         print("validation errors:")
         for error in errors:
@@ -685,9 +792,33 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
         handle.write(f"- config: `{payload['config']}`\n")
         handle.write(f"- eval_set: `{payload['eval_set']}`\n")
         handle.write("- endpoint: not used; L2 synthetic only\n\n")
+        pacing = payload.get("pacing", {})
+        handle.write("## Pacing\n\n")
+        handle.write(f"- post_unload_cooldown_sec: {pacing.get('post_unload_cooldown_sec')}\n")
+        handle.write(f"- post_large_model_cooldown_sec: {pacing.get('post_large_model_cooldown_sec')}\n")
+        handle.write(f"- post_failure_cooldown_sec: {pacing.get('post_failure_cooldown_sec')}\n")
+        handle.write(f"- free_space_floor_gib: {pacing.get('free_space_floor_gib', pacing.get('free_space_floor_gb', 100))}\n")
+        pre_gate = payload.get("pre_run_gate", {})
+        if pre_gate:
+            free_space = pre_gate.get("free_space", {})
+            handle.write(
+                f"- pre_run_gate: pass={pre_gate.get('pass')}, "
+                f"no_models_loaded={pre_gate.get('no_models_loaded')}, "
+                f"free_gib={free_space.get('free_gib')}\n"
+            )
+        handle.write("\n")
         handle.write("| model | case | status | semantic | normalizer | native | core cite | strong cite | failure |\n")
         handle.write("|---|---|---|---:|---:|---:|---:|---:|---|\n")
         for row in payload.get("results", []):
+            if not row.get("cases"):
+                handle.write(
+                    "| {model} | - | {status} | - | - | - | - | - | {failure} |\n".format(
+                        model=row.get("model_label"),
+                        status="error" if row.get("error") else "not_run",
+                        failure=row.get("error") or "",
+                    )
+                )
+                continue
             for case in row.get("cases", []):
                 lanes = case.get("lanes", {})
                 semantic = lanes.get("semantic_rag_lane", {})
@@ -704,7 +835,7 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
                         native=native.get("native_contract_pass"),
                         core=citation.get("core_citation_pass"),
                         strong=citation.get("strong_citation_pass"),
-                        failure=semantic.get("failure_owner") or "",
+                        failure=semantic.get("failure_owner") or row.get("error") or "",
                     )
                 )
     return json_path, md_path
@@ -723,6 +854,7 @@ def run_l2(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[str,
         return 2
 
     lms_exe = find_lms_exe()
+    pacing = config.get("_execution_pacing", {})
     status = lms_status(lms_exe)
     if status.get("returncode") != 0:
         print(status.get("stderr", "lms status failed"))
@@ -742,32 +874,88 @@ def run_l2(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[str,
             "platform": platform.platform(),
             "python": platform.python_version(),
         },
+        "pacing": pacing,
         "lms_status_before": status,
         "results": [],
         "stopped_early": False,
     }
+    payload["pre_run_gate"] = pacing_gate(
+        lms_exe,
+        pacing,
+        "pre_run",
+        do_unload=bool(pacing.get("unload_all_before_each_model", True)),
+    )
+    if not payload["pre_run_gate"].get("pass"):
+        payload["stopped_early"] = True
+        payload["stop_reason"] = "pre-run pacing gate failed"
+        payload["lms_status_after"] = lms_status(lms_exe)
+        json_path, md_path = write_outputs(payload, timestamp)
+        print(f"wrote: {json_path}")
+        print(f"wrote: {md_path}")
+        return 1
+
     cli_args_default = normalize_cli_args(config.get("_load_profile", {}).get("lms_cli_args"))
     for model in models:
+        label = str(model["label"])
         row: dict[str, Any] = {
-            "model_label": model["label"],
+            "model_label": label,
             "lms_key": model["lms_key"],
             "served_model_id": model["served_model_id"],
             "load_options": model.get("load_options", {}),
+            "pacing_events": [],
             "cases": [],
         }
-        unload_all(lms_exe)
+        print(f"\n{label}", flush=True)
+        row["pre_model_gate"] = pacing_gate(
+            lms_exe,
+            pacing,
+            "pre_model_load",
+            do_unload=bool(pacing.get("unload_all_before_each_model", True)),
+            cooldown_sec=pacing.get("post_unload_cooldown_sec", 0),
+            cooldown_reason="pre-load post-unload cooldown",
+        )
+        if not row["pre_model_gate"].get("pass"):
+            row["success"] = False
+            row["error"] = "pre-model pacing gate failed"
+            payload["results"].append(row)
+            payload["stopped_early"] = True
+            break
+
         if config.get("_load_profile", {}).get("estimate_before_load", True) and not args.skip_estimate:
             row["estimate"] = estimate_model(lms_exe, model["lms_key"], model.get("load_options", {}), cli_args_default)
             if row["estimate"].get("returncode") != 0:
                 row["error"] = "estimate failed"
+                row["success"] = False
+                row["recovery"] = pacing_gate(
+                    lms_exe,
+                    pacing,
+                    "estimate_failure_recovery",
+                    do_unload=True,
+                    cooldown_sec=pacing.get("post_failure_cooldown_sec", 0),
+                    cooldown_reason="post-failure cooldown",
+                )
                 payload["results"].append(row)
+                if not row["recovery"].get("pass"):
+                    payload["stopped_early"] = True
+                    break
                 continue
         load = load_model(lms_exe, model["lms_key"], model["served_model_id"], model.get("load_options", {}), cli_args_default)
         row["load"] = load
         if load.get("returncode") != 0:
             row["error"] = "load failed"
+            row["success"] = False
+            row["recovery"] = pacing_gate(
+                lms_exe,
+                pacing,
+                "load_failure_recovery",
+                do_unload=True,
+                cooldown_sec=pacing.get("post_failure_cooldown_sec", 0),
+                cooldown_reason="post-failure cooldown",
+            )
             payload["results"].append(row)
-            unload_all(lms_exe)
+            if not row["recovery"].get("pass"):
+                payload["stopped_early"] = True
+                break
             continue
         options = merged_inference_options(config, model)
         for l2_case in cases:
@@ -791,13 +979,31 @@ def run_l2(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[str,
                     **scored,
                 }
             )
+            if api.get("status") != "ok":
+                row["error"] = f"generation failed: {api.get('status')}"
+                row["generation_error"] = api.get("error", "")
+                break
+        row["success"] = not row.get("error")
+        cooldown_sec, cooldown_reason = cooldown_seconds_for_model(pacing, label, failed=bool(row.get("error")))
+        row["post_model_gate"] = pacing_gate(
+            lms_exe,
+            pacing,
+            "post_model",
+            do_unload=bool(pacing.get("unload_all_after_each_model", True)),
+            cooldown_sec=cooldown_sec,
+            cooldown_reason=f"between-model cooldown {cooldown_reason}",
+        )
         payload["results"].append(row)
-        unload_all(lms_exe)
+        if not row["post_model_gate"].get("pass"):
+            row["success"] = False
+            row["error"] = row.get("error") or "post-model pacing gate failed"
+            payload["stopped_early"] = True
+            break
     payload["lms_status_after"] = lms_status(lms_exe)
     json_path, md_path = write_outputs(payload, timestamp)
     print(f"wrote: {json_path}")
     print(f"wrote: {md_path}")
-    return 0
+    return 1 if payload.get("stopped_early") else 0
 
 
 def parse_args() -> argparse.Namespace:

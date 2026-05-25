@@ -40,6 +40,8 @@ Rules:
 - §2 is the live snapshot and may be updated as statuses change.
 - §5 is append-only; do not delete prior result entries. Add correction notes
   instead of rewriting history.
+- §1 `Current repo HEAD` must be bumped in the same commit as any tracker
+  content change.
 - Commit/push after updates is recommended only after explicit commit/push GO.
 - HP Z2 remains execution-only. Main PC remains canonical for docs, commits,
   and pushes.
@@ -48,11 +50,11 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 pending / L1 pending |
-| Current repo HEAD | `c376052` (`docs(rag): add semantic-first planning docs`) |
-| Current tracker status | live R0, initial pending snapshot |
-| Next recommended GO | `HP Z2 L0 inventory + L1 source verification GO` |
-| L2 blocker | Phase 2.1 design R2 update + semantic-first runner build |
+| Current level | L0 complete / L1 complete / L2 blocked-by-runner-build |
+| Current repo HEAD | `c9831f2` (`docs(rag): add HP Z2 ladder tracker`) before this uncommitted R2 update |
+| Current tracker status | live R1, L0/L1 incorporated from HP Z2 artifact |
+| Next recommended GO | `HP Z2 semantic-first runner build GO` |
+| L2 blocker | semantic-first runner build + dry-run evidence |
 | L3 blocker | runner-side normalizer feasibility prototype |
 | L5 hard blocker | RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
@@ -62,9 +64,9 @@ Rules:
 
 | Level | Status | GO issued | Result reported | Artifact path | Reviewer verdict | Next |
 |---|---|---|---|---|---|---|
-| L0 inventory | pending | - | - | - | - | wait for `HP Z2 L0 inventory + L1 source verification GO` |
-| L1 source verification | pending | - | - | - | - | run with L0, then report inventory/source matrix |
-| L2 semantic smoke | blocked-by-design-R2 | - | - | - | - | requires L1 + design R2 + semantic-first runner build |
+| L0 inventory | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | complete |
+| L1 source verification | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | use source matrix for model-axis catalog |
+| L2 semantic smoke | blocked-by-runner-build | - | - | - | - | requires semantic-first runner build + dry-run evidence |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 real endpoint | blocked-hard | - | - | - | - | requires RA-03 checks + sufficient L2-L4 evidence + `Phase 2 heavy run GO` |
@@ -73,11 +75,11 @@ Rules:
 
 | Track | Scope | Status | Ladder dependency | Owner |
 |---|---|---|---|---|
-| Phase 2.1 design R1 -> R2 update | 4-lane mapping, scorer P7 placeholder rejection fix, acceptable citation set, model-axis catalog, C1-C7 hooks | pending | recommended before L2 | Main PC Codex |
+| Phase 2.1 design R1 -> R2 update | 4-lane mapping, scorer P7 placeholder rejection fix, acceptable citation set, model-axis catalog, C1-C7 hooks | complete-in-working-tree | required before L2 | Main PC Codex |
 | Stage A-R lane reinterpretation | Reclassify existing Stage A-R / ModelOps results under 4 lanes and L0-L5 ladder | pending | useful before L2 comparisons | Main PC Codex |
 | Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | pending | required before L2 | Main PC Codex |
 | Normalizer adapter prototype | Runner-side only, eval scope, no EMR production write | pending | required before L3 | Main PC Codex |
-| L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | pending | safe first execution step | HP Z2 Codex |
+| L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | complete | safe first execution step | HP Z2 Codex |
 | RA-03 user-owned checks | Final input/citation/user-verdict checks required before real endpoint | pending | hard blocker before L5 | User |
 | Claude/read-only review | Review tracker updates, design R2, L0-L5 result packets | standby | after each result report | HP Z2 Claude |
 
@@ -100,47 +102,49 @@ Append new result entries below. Keep old entries intact.
 
 ### L0 inventory
 
-- Status: pending
-- GO issued: -
-- Artifact: -
-- Key fields to capture:
-  - `lms ls` output path
-  - loaded model state before/after
-  - C: free space
-  - installed LLM count
-  - model root path
-  - final loaded models should be `[]`
-- Reviewer verdict: -
-- Next GO: `HP Z2 L0 inventory + L1 source verification GO`
+- Status: complete
+- GO issued: `HP Z2 L0 inventory + L1 source verification GO`
+- Reported: 2026-05-25
+- Artifact: `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323`
+- Key fields captured:
+  - `lms ls` output path: `lms_ls.json`
+  - loaded model state before/after: No Models Loaded / No Models Loaded
+  - C: free space: 230.28 GiB, 100 GiB floor PASS
+  - installed LLM count: 13
+  - embedding count: 1
+  - model root path: `C:\Users\test\.lmstudio\models`
+  - final loaded models: No Models Loaded
+- Reviewer verdict: accepted-for-design-R2
+- Next GO: `HP Z2 semantic-first runner build GO`
 
 ### L1 source verification
 
-- Status: pending
-- GO issued: -
-- Artifact: -
-- Key fields to capture:
-  - model key
-  - publisher/distributor
-  - source URL
-  - quant
-  - local size GiB
-  - source trust
-  - license/access notes
-  - keep/review/delete-candidate recommendation
-- Reviewer verdict: -
-- Next GO: wait for L0/L1 result review
+- Status: complete
+- GO issued: `HP Z2 L0 inventory + L1 source verification GO`
+- Reported: 2026-05-25
+- Artifact: `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323`
+- Key fields captured:
+  - source API status: all installed LLM/embedding repos OK
+  - official LLM count: 4
+  - high-trust Unsloth LLM count: 9
+  - all resolved LLM folders <= 71 GiB: true
+  - largest resolved folder: `openai/gpt-oss-120b` at 59.03 GiB
+  - shared `qwen3.6-35b-a3b-mtp` repo folder: 58.74 GiB
+  - cleanup/download/test: none
+- Reviewer verdict: accepted-for-design-R2; not a cleanup approval
+- Next GO: use model-axis catalog for semantic-first runner build and L2 candidate selection
 
 ### L2 semantic smoke matrix
 
-- Status: blocked
+- Status: blocked-by-runner-build
 - GO issued: -
 - Artifact: -
 - Required before entry:
-  - L0/L1 reviewed
-  - design R2 updated or accepted as not needed for this L2 slice
-  - semantic-first runner built or selected
+  - L0/L1 reviewed: complete
+  - design R2 updated: complete in working tree
+  - semantic-first runner built or selected: pending
 - Reviewer verdict: -
-- Next GO: pending
+- Next GO: `HP Z2 semantic-first runner build GO`
 
 ### L3 normalizer feasibility
 
@@ -198,3 +202,4 @@ Append new result entries below. Keep old entries intact.
 | Version | Date | Change |
 |---|---|---|
 | R0 | 2026-05-25 | Initial L0-L5 progress tracker. Snapshot all levels pending/blocked, added parallel tracks, GO carry, result archive placeholders, and STOP carry. |
+| R1 | 2026-05-25 | Incorporated HP Z2 L0/L1 inventory and source verification results from `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323`; marked L0/L1 complete, corrected current HEAD snapshot, and set next GO to semantic-first runner build before L2. |

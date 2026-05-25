@@ -1,16 +1,16 @@
 {
   "version": "0.1",
-  "status": "R1 frozen + RA-03 user resolution patch applied (2026-05-24). RA-03 placeholders resolved as AGE diarrhea bundle: sme + trimesy + lacto2, dx=a090, pediatric age=1, expected citations verified against current RAG chunks. Remaining user-owned placeholders = RA-01/RA-02/RA-05 expected_summary_keywords + user_verdict_carry Phase 2 spot check + RA-01/02/05 clinical input 정합 사용자 검토. 본 baseline = heavy run / model execution / EMR_AI_24clinic write / commit·push 모두 0 carry. RA-04 synthetic_phi_fixture 외부 공유 금지·redact 조건 유지 (request_field_notes._external_sharing_note 참조).",
+  "status": "R2 pre-L2 policy update (2026-05-25). R1 frozen baseline retained; RA-03 resolved values unchanged as sme + trimesy + lacto2, dx=a090, pediatric age=1. Added semantic-first 4-lane carry, P7 placeholder rejection, acceptable citation policy, and BST/dige citation overrides for L2 runner design. Remaining user-owned placeholders = RA-01/RA-02/RA-05 expected_summary_keywords + user_verdict_carry Phase 2 spot check + RA-01/02/05 clinical input 정합 사용자 검토. 본 baseline = heavy run / model execution / explain call / EMR_AI_24clinic write / commit·push 모두 0 carry.",
   "description": "RAG-aware evaluation set for EMR_AI_24clinic /explain endpoint. 15 cases = 10 Phase 1c smoke carry + 5 RAG-aware new (RA-01~05). Targets 7 axes (citation 3-way split / context_only / safety_wording / PHI 0 / latency / retrieval_relevance / user_judgement_alignment) per R1 frozen design.",
-  "design_doc_ref": "../docs/rag_aware_eval_design_r0.md (Phase 2.1 R1 frozen, 2026-05-22)",
-  "design_doc_version": "Phase 2.1 R1 frozen",
+  "design_doc_ref": "../docs/rag_aware_eval_design_r0.md (Phase 2.1 R2 pre-L2 update, 2026-05-25)",
+  "design_doc_version": "Phase 2.1 R2 pre-L2 update",
   "shared_sop_version": "AI Project Operating Rules v0.1 R4 (commit f1c471d)",
   "created": "2026-05-22",
-  "updated": "2026-05-24",
+  "updated": "2026-05-25",
   "endpoint_under_test": {
     "method": "POST",
     "path": "/explain",
-    "host_default": "http://localhost:11434 (Ollama loopback only, external host 금지)",
+    "host_default": "L5 only: real /explain endpoint host is not authorized before explicit Phase 2 heavy run GO. Current runtime lane is HP Z2 LM Studio / llama.cpp Vulkan, not Ollama.",
     "request_schema_ref": "../../EMR_AI_24clinic/AI용_RAG_Phase1c_인수인계_2026-05-19.md §3.2",
     "response_status_set": [
       "ok",
@@ -26,6 +26,24 @@
     "top_k": 5,
     "min_similarity": 0.45,
     "lexical_rerank": false
+  },
+  "evaluation_lanes": {
+    "semantic_rag_lane": {
+      "purpose": "Judge raw model potential against retrieved evidence before strict endpoint/schema scoring.",
+      "primary_fields": ["semantic_pass", "grounding_pass", "citation_integrity", "safety_pass", "failure_owner"]
+    },
+    "normalizer_lane": {
+      "purpose": "Judge whether raw output can be converted to {summary, citations} without changing meaning or inventing evidence.",
+      "primary_fields": ["normalizer_pass", "normalizer_error", "extracted_summary", "extracted_citations"]
+    },
+    "native_contract_lane": {
+      "purpose": "Measure strict JSON/schema convenience only; this does not override semantic quality.",
+      "primary_fields": ["native_contract_pass", "parse_status", "schema_error"]
+    },
+    "real_endpoint_lane": {
+      "purpose": "Measure actual /explain end-to-end behavior only after explicit Phase 2 heavy run GO.",
+      "primary_fields": ["endpoint_pass", "response_status", "latency_ms", "verifier_result", "PHI_zero_hit"]
+    }
   },
   "model_default": "qwen3:14b",
   "fallback_model": "qwen3:8b",
@@ -89,7 +107,7 @@
       "id": "5a",
       "name": "latency_cold_ms",
       "automation": "auto",
-      "denominator_rule": "1 per cell (cold start, Ollama model load 포함)",
+      "denominator_rule": "1 per cell (cold start, runtime model load 포함; old artifact was Ollama, current lane is LM Studio/Vulkan)",
       "target": "<= 30000",
       "hard_fail_gate": false,
       "phase1c_baseline_primary_smoke_artifact": 14191,
@@ -141,8 +159,37 @@
     "phi_input_test_flag": "boolean (true = PHI early-return stress test target, e.g., RA-04)",
     "axis_focus": "array of axis IDs (subset of scoring_axes.id)",
     "expected_citations_includes_at_least": "array of source_id strings (subset of retrieved set). carry case 는 smoke artifact value 그대로.",
+    "acceptable_citation_set": "optional object. If present, scorer uses required_all/core_any_of/strong_all/optional_hits/invalid_aliases instead of treating expected_citations_includes_at_least as the only pass surface.",
     "expected_summary_keywords": "array of keyword strings expected in summary, or '{TBD-by-user-spot-check}' for RA-01/RA-02/RA-05 new cases pending Phase 2 spot check (RA-03 resolved; RA-04 N/A early return)",
     "user_verdict_carry": "string (PASS / partially resolved / NO-GO / TBD)"
+  },
+  "placeholder_policy": {
+    "id": "P7-placeholder-rejection",
+    "hard_fail_for_returned_citations": ["{TBD-*}", "{TBD-by-user-spot-check}", "{placeholder}", ""],
+    "allowed_only_in_planning_fields": ["expected_summary_keywords", "user_verdict_carry"],
+    "runner_behavior": "Returned placeholder citations or placeholder answer content must not count as semantic, normalizer, native contract, or endpoint pass. Cases with user-owned expected wording placeholders may still compute automatic citation/PHI/parse fields but should mark manual semantic verdict as manual_review_needed."
+  },
+  "acceptable_citation_policy": {
+    "default_mode": "required_all_from_expected_citations_includes_at_least",
+    "normalization": "strip surrounding brackets only, e.g. [kb:BST_시나리오] -> kb:BST_시나리오",
+    "source_id_requirement": "all counted citations must exist in the retrieved evidence source_id set",
+    "alias_policy": "aliases are invalid unless explicitly listed in invalid_aliases or an approved alias map for that case",
+    "fields": {
+      "required_all": "all listed source_ids are required for pass",
+      "core_any_of": "at least one listed source_id is enough for core citation pass",
+      "strong_all": "all listed source_ids are required for strong citation pass",
+      "optional_hits": "record only; absence is not a fail",
+      "invalid_aliases": "record as alias/mismatch, not pass"
+    }
+  },
+  "r2_metric_hooks": {
+    "C1_atomic_claim_decomposition": ["claim_count", "claim_grounded_count", "claim_grounding_score"],
+    "C2_retrieval_precision_recall": ["retrieval_precision_at_k", "retrieval_recall_proxy", "retrieved_source_ids"],
+    "C3_response_completeness": ["response_completeness", "missing_critical_info"],
+    "C4_case_aware_scoring": ["case_metric_profile"],
+    "C5_multi_method_metric_layering": ["boolean_gates", "numeric_scores", "manual_verdict", "user_verdict"],
+    "C6_provenance_eval_only": ["model_id", "prompt_profile", "source_artifact_id", "retrieval_set_id"],
+    "C7_metric_risk_review": ["metric_risk_notes"]
   },
   "denominator_summary": {
     "axis_1a_1b_1c": "model_call_expected=true AND expected_status=='ok' = 14 cases (RA-04 제외)",
@@ -164,7 +211,7 @@
     "check_result.source": "retrieval query 의 bag-of-words 일부로만 사용 (`app/llm/prompt_builder.py` 의 `build_retrieval_query` 참조). source_id 검증 (`citation_verifier.py`) 에는 사용되지 않음. 따라서 source_id naming convention (`rule:xxx` / `kb:yyy` / `dict:zzz`) 형식 아니어도 기능 영향 X. RA-01 (`rule_drug_duplicate`) / RA-02 (`rule_diabetes_combination`) 등 free-form description 도 retrieval relevance 측면에서만 영향. runner / reviewer 는 source 값을 source_id 형식 검증 대상으로 사용하지 말 것.",
     "check_result.message_sub": "free-form description. retrieval query bag-of-words 영역. 검증 대상 X.",
     "check_result.level": "enum: err | warn | info | unknown. `/explain` backend 는 level 필터링 X (UX 측면에서만 err/warn/unknown 에 [근거 설명] 버튼 노출). 검증 대상은 자유 string 통과 여부.",
-    "expected_citations_includes_at_least": "array of source_id strings. 본 array 안 모든 source_id 는 retrieved chunk 의 source_id set (`rag_index/_build/` 정본) 에 존재해야 함. TBD placeholder 는 1-element array (`[\"{TBD-by-user-spot-check}\"]`) + `expected_citations_pending: true` flag 로 표시 (RA-03 패턴).",
+    "expected_citations_includes_at_least": "array of source_id strings. 본 array 안 모든 source_id 는 retrieved chunk 의 source_id set (`rag_index/_build/` 정본) 에 존재해야 함. R2부터 returned citation placeholder 는 P7 hard fail이며, unresolved planning placeholder 는 expected_summary_keywords 같은 user-owned planning field 에만 남길 수 있음.",
     "synthetic_phi_fixture": "boolean. true = case 안 PHI-shape 데이터가 의도된 합성 fixture 임을 명시 (RA-04). 자동 PHI scanner / reviewer 가 false-positive 로 잡지 않도록 신호. 실제 환자 mapping 없음 (홍길동 / 010-XXXX / fictional RRN pattern only).",
     "_external_sharing_note": "synthetic_phi_fixture=true 인 case 의 explain_request 안 PHI-shape 데이터는 외부 공유 금지 (audit log / 외부 reviewer 발송 / 외부 service 전송 시 redact 필수). repo 안 commit / 내부 review 는 허용."
   },
@@ -178,6 +225,10 @@
       "phi_input_test_flag": false,
       "axis_focus": ["1a", "1b", "1c", "2", "3", "6", "7"],
       "expected_citations_includes_at_least": ["rule:dige-market-withdrawn", "kb:dige_EMR_제한_코드"],
+      "acceptable_citation_set": {
+        "required_all": ["rule:dige-market-withdrawn", "kb:dige_EMR_제한_코드"],
+        "invalid_aliases": ["kb:dige-emr-code", "dige-emr-code"]
+      },
       "expected_summary_keywords": ["dige", "ranitidine", "시장 철수", "처방 불가"],
       "user_verdict_carry": "PASS (User R13 — Case 01 safety critical 해소, 대체 약 wording 완전 제거)"
     },
@@ -273,7 +324,12 @@
       "model_call_expected": true,
       "phi_input_test_flag": false,
       "axis_focus": ["1a", "1b", "1c", "2", "6", "7"],
-      "expected_citations_includes_at_least": ["kb:BST_시나리오", "kb:bst_vs_glu"],
+      "expected_citations_includes_at_least": ["kb:BST_시나리오"],
+      "acceptable_citation_set": {
+        "core_any_of": ["rule:module:bst", "kb:BST_시나리오"],
+        "strong_all": ["rule:module:bst", "kb:BST_시나리오"],
+        "optional_hits": ["kb:bst_vs_glu", "dict:bst"]
+      },
       "expected_summary_keywords": ["BST", "bst", "혈당측정", "오더"],
       "user_verdict_carry": "partially resolved (User R13 — chunk-09-1 wording 추가, LLM summary minor '실제 시행 확인' step 직접 반영 X. deferred)"
     },
@@ -535,7 +591,7 @@
     "model_call_expected=true 인 14 case 의 expected_citations_includes_at_least 가 retrieved chunk 정본 (../../EMR_AI_24clinic/rag_index/_build/) 안에 존재함을 read-only verify"
   ],
   "stop_carry": [
-    "heavy run X (HP Z2 setup 완료 + Phase 2 heavy run GO 발행 전 절대 금지)",
+    "heavy run X (L2/L3/L4/L5 각각 별도 GO 전 절대 금지; real /explain은 explicit Phase 2 heavy run GO 전 금지)",
     "EMR_AI_24clinic repo write 0 (Phase 1c closure 유지)",
     "Codex 발행 0 (planning 단계)",
     "commit / push 0",
@@ -565,6 +621,11 @@
       "version": "R1.1 RA-03 user resolution",
       "date": "2026-05-24",
       "change": "사용자 확정값 반영: RA-03 {TBD-code-1}=sme, {TBD-code-2}=trimesy, additional AGE bundle context=lacto2, {TBD-dx}=a090, 소아 age=1. expected_citations_includes_at_least 를 rule:drug:sme / kb:소아_AGE_sme_2세미만 / kb:소아_AGE_FGID:007 로 확정하고 expected_citations_pending=false 로 전환. expected_summary_keywords 에 sme/trimesy/lacto2/hidra/2세 미만/나이 확인/제한 관찰 포인트 반영. RA-03 blocking_heavy_run flag 2건 false 처리. heavy run X / model execution X / EMR_AI_24clinic write X / commit X / push X carry 유지."
+    },
+    {
+      "version": "R2 pre-L2 policy update",
+      "date": "2026-05-25",
+      "change": "semantic-first 4-lane metadata, P7 placeholder rejection, acceptable citation policy, C1-C7 metric hooks 추가. smoke-01 dige exact source IDs + invalid alias policy 명시. smoke-09 BST는 acceptable_citation_set 신규 도입: core_any_of=[rule:module:bst, kb:BST_시나리오], strong_all=[rule:module:bst, kb:BST_시나리오], optional_hits=[kb:bst_vs_glu, dict:bst]. RA-03 resolved values unchanged. heavy run X / model execution X / explain call X / EMR_AI_24clinic write X / commit X / push X carry 유지."
     }
   ]
 }

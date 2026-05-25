@@ -1,0 +1,564 @@
+{
+  "version": "0.1-l2-semantic",
+  "status": "R0 L2 synthetic semantic smoke config. Built on Main PC; no model execution has been run from this config.",
+  "_stage_label": "HP Z2 Phase 2 L2 Semantic Smoke",
+  "_result_artifact_prefix": "hpz2_lmstudio_phase2_l2_semantic",
+  "_scope": "Synthetic LM Studio-only semantic-first smoke over fixed evidence packs. This is model-potential evaluation before any real endpoint lane.",
+  "_official_execution_host": "HP Z2 Mini G1a",
+  "_canonical_workspace": "Main PC keeps source-of-truth docs, commits, and pushes. HP Z2 is execution-only runner.",
+  "_hard_stops": [
+    "Do not run real L2 model execution unless the user explicitly issues HP Z2 L2 semantic smoke matrix GO.",
+    "Do not write to EMR_AI_24clinic from this runner or config.",
+    "Do not commit or push without explicit user GO.",
+    "Do not change RA-03 resolved values.",
+    "Do not enter L3, L4, L5, Stage B/C, cleanup, or download from this config."
+  ],
+  "_backend": {
+    "provider": "lm_studio",
+    "runtime": "llama.cpp Vulkan",
+    "server_url_default": "http://127.0.0.1:1234/v1",
+    "server_lan_url_observed": "http://192.168.68.50:1234/v1"
+  },
+  "_l2_semantic_smoke": {
+    "mode": "l2_synthetic_semantic_smoke",
+    "runner": "tools/hpz2_lmstudio_phase2_l2_semantic_runner.py",
+    "eval_set": "prompts/rag_aware_eval_set_v0.1.json",
+    "result_artifact_prefix": "hpz2_lmstudio_phase2_l2_semantic",
+    "case_count": 4,
+    "real_endpoint_lane": "record_not_run",
+    "dry_run_required_before_execution": true,
+    "default_tier": "l2_initial_6"
+  },
+  "_load_profile": {
+    "gpu": "max",
+    "context_length": 32768,
+    "ttl": 3600,
+    "parallel": 1,
+    "estimate_before_load": true,
+    "lms_cli_args": [
+      "-y"
+    ],
+    "_note": "The runner passes only stable LM Studio CLI load options: gpu, context_length, ttl, and parallel. Other llama.cpp tuning remains out of first-pass L2."
+  },
+  "_execution_pacing": {
+    "unload_all_before_each_model": true,
+    "unload_all_after_each_model": true,
+    "require_lms_status_no_models_loaded_before_next_load": true,
+    "post_unload_cooldown_sec": 90,
+    "post_large_model_cooldown_sec": 180,
+    "post_failure_cooldown_sec": 180,
+    "large_model_labels": [
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-qwen35-122b-a10b-mtp",
+      "hpz2-l2-qwen35-122b-a10b",
+      "hpz2-l2-llama-33-70b-instruct"
+    ]
+  },
+  "_prompt_template": {
+    "system": "You are evaluating a synthetic clinical RAG evidence pack. Use only the evidence pack. Return a concise Korean answer. Do not invent source IDs.",
+    "user_template": "Case: {case_id}\nEval case: {eval_case_id}\n\nTask:\n{task}\n\nCase context:\n{case_context}\n\nEvidence pack:\n{evidence_pack}\n\nAcceptable citation set:\n{acceptable_citation_set}\n\nOutput contract:\n{output_contract}",
+    "output_contract": {
+      "type": "json_object",
+      "required": [
+        "summary",
+        "citations"
+      ],
+      "summary": "Korean string. Explain only what is supported by evidence.",
+      "citations": "Array of exact source_id strings from the evidence pack. Brackets are optional in raw text, but normalized IDs must match."
+    }
+  },
+  "_inference_profile_defaults": {
+    "response_format": "none",
+    "temperature": 0.0,
+    "max_tokens": 512,
+    "timeout_seconds": 600
+  },
+  "_default_tier": "l2_initial_6",
+  "_model_tiers": {
+    "l2_initial_6": [
+      "hpz2-l2-openai-gpt-oss-20b",
+      "hpz2-l2-google-gemma-4-26b-a4b",
+      "hpz2-l2-qwen36-35b-a3b",
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "hpz2-l2-mistral-small-32-24b"
+    ],
+    "fast_daily": [
+      "hpz2-l2-openai-gpt-oss-20b",
+      "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "hpz2-l2-mistral-small-32-24b"
+    ],
+    "quality": [
+      "hpz2-l2-google-gemma-4-26b-a4b",
+      "hpz2-l2-qwen36-35b-a3b",
+      "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "hpz2-l2-qwen36-35b-a3b-mtp-q8"
+    ],
+    "reference": [
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-llama-33-70b-instruct",
+      "hpz2-l2-qwen35-122b-a10b-mtp",
+      "hpz2-l2-qwen35-122b-a10b"
+    ],
+    "duplicate_review": [
+      "hpz2-l2-unsloth-gpt-oss-20b",
+      "hpz2-l2-openai-gpt-oss-20b",
+      "hpz2-l2-gemma-4-31b-it",
+      "hpz2-l2-google-gemma-4-26b-a4b"
+    ],
+    "all": [
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "hpz2-l2-qwen36-35b-a3b-mtp-q8",
+      "hpz2-l2-qwen35-122b-a10b-mtp",
+      "hpz2-l2-qwen35-122b-a10b",
+      "hpz2-l2-llama-33-70b-instruct",
+      "hpz2-l2-gemma-4-31b-it",
+      "hpz2-l2-google-gemma-4-26b-a4b",
+      "hpz2-l2-qwen36-35b-a3b",
+      "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "hpz2-l2-mistral-small-32-24b",
+      "hpz2-l2-unsloth-gpt-oss-20b",
+      "hpz2-l2-openai-gpt-oss-20b"
+    ]
+  },
+  "models": [
+    {
+      "label": "hpz2-l2-openai-gpt-oss-120b",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-120b",
+      "served_model_id": "hpz2-l2-openai-gpt-oss-120b",
+      "_tier": "reference",
+      "_source": "official",
+      "_quant": "MXFP4",
+      "_size_gib": 59.03,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gpt-oss-low-freejson",
+        "response_format": "none",
+        "system_prefix": "Reasoning: low",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "provider": "lm_studio",
+      "lms_key": "qwen3.6-35b-a3b-mtp@?",
+      "served_model_id": "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "_tier": "quality",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "MXFP4_MOE",
+      "_size_gib": 22.32,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "qwen36-freejson-no-think",
+        "response_format": "none",
+        "temperature": 0.0,
+        "user_suffix": "/no_think",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-qwen36-35b-a3b-mtp-q8",
+      "provider": "lm_studio",
+      "lms_key": "qwen3.6-35b-a3b-mtp@q8_k_xl",
+      "served_model_id": "hpz2-l2-qwen36-35b-a3b-mtp-q8",
+      "_tier": "quality",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q8_K_XL",
+      "_size_gib": 38.08,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "qwen36-freejson-no-think-q8",
+        "response_format": "none",
+        "temperature": 0.0,
+        "user_suffix": "/no_think",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-qwen35-122b-a10b-mtp",
+      "provider": "lm_studio",
+      "lms_key": "qwen3.5-122b-a10b-mtp",
+      "served_model_id": "hpz2-l2-qwen35-122b-a10b-mtp",
+      "_tier": "reference",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q3_K_M",
+      "_size_gib": 54.2,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 16384,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "qwen35-reference-freejson",
+        "response_format": "none",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-qwen35-122b-a10b",
+      "provider": "lm_studio",
+      "lms_key": "qwen3.5-122b-a10b",
+      "served_model_id": "hpz2-l2-qwen35-122b-a10b",
+      "_tier": "reference",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q3_K_M",
+      "_size_gib": 52.55,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 16384,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "qwen35-reference-freejson",
+        "response_format": "none",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-llama-33-70b-instruct",
+      "provider": "lm_studio",
+      "lms_key": "llama-3.3-70b-instruct",
+      "served_model_id": "hpz2-l2-llama-33-70b-instruct",
+      "_tier": "reference",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q4_K_M",
+      "_size_gib": 39.6,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 16384,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "llama-reference-freejson",
+        "response_format": "none",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-gemma-4-31b-it",
+      "provider": "lm_studio",
+      "lms_key": "gemma-4-31b-it",
+      "served_model_id": "hpz2-l2-gemma-4-31b-it",
+      "_tier": "duplicate_review",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q8_K_XL",
+      "_size_gib": 34.76,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gemma-freejson-thinking-off",
+        "response_format": "none",
+        "temperature": 0.0,
+        "system_suffix": "Keep the answer concise. Do not expose hidden reasoning.",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-google-gemma-4-26b-a4b",
+      "provider": "lm_studio",
+      "lms_key": "google/gemma-4-26b-a4b",
+      "served_model_id": "hpz2-l2-google-gemma-4-26b-a4b",
+      "_tier": "quality",
+      "_source": "official",
+      "_quant": "Q8_0",
+      "_size_gib": 26.13,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gemma-freejson-thinking-off",
+        "response_format": "none",
+        "temperature": 0.0,
+        "system_suffix": "Keep the answer concise. Do not expose hidden reasoning.",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-qwen36-35b-a3b",
+      "provider": "lm_studio",
+      "lms_key": "qwen/qwen3.6-35b-a3b",
+      "served_model_id": "hpz2-l2-qwen36-35b-a3b",
+      "_tier": "quality",
+      "_source": "official",
+      "_quant": "Q4_K_M",
+      "_size_gib": 20.55,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "qwen36-freejson-no-think",
+        "response_format": "none",
+        "temperature": 0.0,
+        "user_suffix": "/no_think",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "provider": "lm_studio",
+      "lms_key": "unsloth/gemma-4-26b-a4b-it",
+      "served_model_id": "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "_tier": "fast_daily",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "MXFP4_MOE",
+      "_size_gib": 17.55,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gemma-fast-freejson",
+        "response_format": "none",
+        "temperature": 0.0,
+        "system_suffix": "Keep the answer concise. Do not expose hidden reasoning.",
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-mistral-small-32-24b",
+      "provider": "lm_studio",
+      "lms_key": "mistral-small-3.2-24b-instruct-2506",
+      "served_model_id": "hpz2-l2-mistral-small-32-24b",
+      "_tier": "fast_daily",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "Q4_K_XL",
+      "_size_gib": 13.55,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "mistral-small-freejson",
+        "response_format": "none",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-unsloth-gpt-oss-20b",
+      "provider": "lm_studio",
+      "lms_key": "unsloth/gpt-oss-20b",
+      "served_model_id": "hpz2-l2-unsloth-gpt-oss-20b",
+      "_tier": "duplicate_review",
+      "_source": "high-trust Unsloth GGUF",
+      "_quant": "F16",
+      "_size_gib": 12.85,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gpt-oss-low-freejson-duplicate-review",
+        "response_format": "none",
+        "system_prefix": "Reasoning: low",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    },
+    {
+      "label": "hpz2-l2-openai-gpt-oss-20b",
+      "provider": "lm_studio",
+      "lms_key": "openai/gpt-oss-20b",
+      "served_model_id": "hpz2-l2-openai-gpt-oss-20b",
+      "_tier": "fast_daily",
+      "_source": "official",
+      "_quant": "MXFP4",
+      "_size_gib": 11.28,
+      "load_options": {
+        "gpu": "max",
+        "context_length": 32768,
+        "ttl": 3600,
+        "parallel": 1
+      },
+      "inference_options": {
+        "profile": "gpt-oss-low-freejson",
+        "response_format": "none",
+        "system_prefix": "Reasoning: low",
+        "temperature": 0.0,
+        "max_tokens": 512
+      }
+    }
+  ],
+  "l2_cases": [
+    {
+      "case_id": "l2-smoke-09-bst",
+      "eval_case_id": "smoke-09-bst",
+      "mode": "synthetic_semantic",
+      "task": "차트에 혈당측정 값이 있으나 오더에 bst 코드가 없는 경우 누락 방지 규칙을 설명하고 근거 source_id를 반환한다.",
+      "case_context": {
+        "chart_signal": "BST value present",
+        "orders": [],
+        "expected_action": "청구 누락 방지를 위해 bst 코드 확인"
+      },
+      "case_metric_profile": "bst_bidirectional_code_value_match",
+      "metric_risk_notes": "kb:bst_vs_glu는 optional hit이며 core fail 조건이 아니다.",
+      "acceptable_citation_set": {
+        "core_any_of": [
+          "rule:module:bst",
+          "kb:BST_시나리오"
+        ],
+        "strong_all": [
+          "rule:module:bst",
+          "kb:BST_시나리오"
+        ],
+        "optional_hits": [
+          "kb:bst_vs_glu",
+          "dict:bst"
+        ]
+      },
+      "evidence_pack": [
+        {
+          "source_id": "rule:module:bst",
+          "text": "BST 값이 차트에 있으면 관련 오더 코드 누락 여부를 확인해야 한다."
+        },
+        {
+          "source_id": "kb:BST_시나리오",
+          "text": "혈당측정 기록과 bst 코드가 서로 맞지 않으면 누락 또는 과잉 입력 가능성을 점검한다."
+        },
+        {
+          "source_id": "kb:bst_vs_glu",
+          "text": "BST는 측정 행위이고 glu 관련 항목과 청구 의미가 다를 수 있다."
+        },
+        {
+          "source_id": "dict:bst",
+          "text": "bst는 혈당측정 코드 후보로 관리된다."
+        }
+      ]
+    },
+    {
+      "case_id": "l2-smoke-01-dige",
+      "eval_case_id": "smoke-01-dige",
+      "mode": "synthetic_semantic",
+      "task": "dige/ranitidine 계열 제한 규칙을 설명하고 정확한 source_id만 반환한다.",
+      "case_context": {
+        "orders": [
+          "dige"
+        ],
+        "risk": "market withdrawn ingredient"
+      },
+      "case_metric_profile": "withdrawn_drug_exact_source",
+      "metric_risk_notes": "dige EMR 제한 코드 source_id alias는 pass로 보지 않는다.",
+      "acceptable_citation_set": {
+        "required_all": [
+          "rule:dige-market-withdrawn",
+          "kb:dige_EMR_제한_코드"
+        ],
+        "invalid_aliases": [
+          "kb:dige-emr-code",
+          "dige-emr-code"
+        ]
+      },
+      "evidence_pack": [
+        {
+          "source_id": "rule:dige-market-withdrawn",
+          "text": "ranitidine 성분은 시장 철수로 처방 제한 규칙에 해당한다."
+        },
+        {
+          "source_id": "kb:dige_EMR_제한_코드",
+          "text": "EMR에서 dige 코드는 제한 코드로 관리되며 정확한 코드 확인이 필요하다."
+        }
+      ]
+    },
+    {
+      "case_id": "l2-ra03-sme-age",
+      "eval_case_id": "RA-03-safety-boundary",
+      "mode": "synthetic_semantic",
+      "task": "AGE 소아 1세 환자에게 sme, trimesy, lacto2가 있는 상황에서 지사제/진경제/유산균 묶음의 안전 경계를 설명한다.",
+      "case_context": {
+        "dx": [
+          "a090"
+        ],
+        "orders": [
+          "sme",
+          "trimesy",
+          "lacto2"
+        ],
+        "patient_type": "소아",
+        "age": 1
+      },
+      "case_metric_profile": "pediatric_age_drug_safety_boundary",
+      "metric_risk_notes": "RA-03 resolved carry must stay sme + trimesy + lacto2 / a090 / age 1.",
+      "evidence_pack": [
+        {
+          "source_id": "rule:drug:sme",
+          "text": "sme는 소아 연령 제한 확인이 필요한 지사제 계열 코드로 관리한다."
+        },
+        {
+          "source_id": "kb:소아_AGE_sme_2세미만",
+          "text": "소아 AGE에서 sme는 만 2세 미만 사용 제한을 확인해야 한다."
+        },
+        {
+          "source_id": "kb:소아_AGE_FGID:007",
+          "text": "AGE 설사 약속처방에는 증상과 연령에 따라 trimesy, lacto2, 지사제 사용 여부를 함께 검토한다."
+        }
+      ]
+    },
+    {
+      "case_id": "l2-ra05-ped-iv-nuance",
+      "eval_case_id": "RA-05-rule-kb-nuance-conflict",
+      "mode": "synthetic_semantic",
+      "task": "소아 IV 제한 규칙과 수액 재량 근거가 함께 있는 경우 rule 우선 경계와 kb nuance를 같이 설명한다.",
+      "case_context": {
+        "dx": [
+          "a09"
+        ],
+        "orders": [
+          "tamiiv"
+        ],
+        "patient_type": "소아",
+        "age": 11
+      },
+      "case_metric_profile": "rule_kb_nuance_conflict",
+      "metric_risk_notes": "RA-05 expected_summary_keywords is user-owned, so semantic verdict may be manual_review_needed even when citations pass.",
+      "evidence_pack": [
+        {
+          "source_id": "rule:ped-iv-ban",
+          "text": "소아 IV 처방은 제한 규칙에 따라 우선 차단 또는 재검토 대상이 될 수 있다."
+        },
+        {
+          "source_id": "kb:소아_IV_수액_재량",
+          "text": "소아 수액 처방은 임상 상황에 따라 재량 판단이 필요하지만 제한 rule을 무시하지 않는다."
+        }
+      ]
+    }
+  ]
+}

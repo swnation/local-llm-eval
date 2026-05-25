@@ -15,6 +15,9 @@ related:
   - prompts/rag_aware_eval_set_v0.1.json
   - models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json
   - models_config_hpz2_lmstudio_phase2_stage_ar_v0.1.json
+  - models_config_hpz2_lmstudio_phase2_l2_semantic_v0.1.json
+  - tools/hpz2_lmstudio_phase2_l2_semantic_runner.py
+  - docs/hpz2-lmstudio-phase2-l2-semantic-runner-2026-05-25.md
 ---
 
 # HP Z2 Phase 2 Ladder Progress v0.1
@@ -50,11 +53,11 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / L2 blocked-by-runner-build |
-| Current repo HEAD | `c9831f2` (`docs(rag): add HP Z2 ladder tracker`) before this uncommitted R2 update |
-| Current tracker status | live R1, L0/L1 incorporated from HP Z2 artifact |
-| Next recommended GO | `HP Z2 semantic-first runner build GO` |
-| L2 blocker | semantic-first runner build + dry-run evidence |
+| Current level | L0 complete / L1 complete / L2 runner built locally / L2 execution blocked-by-commit-and-HP-dry-run |
+| Current repo HEAD | `f3d0a9e` (`docs(rag): apply R2 pre-L2 update`) before this uncommitted L2 runner build |
+| Current tracker status | live R2, L2 semantic runner/config/docs complete in working tree |
+| Next recommended GO | `Phase 2 L2 semantic runner commit/push GO` |
+| L2 blocker | commit/push + HP Z2 pull/dry-run + separate L2 semantic smoke matrix GO |
 | L3 blocker | runner-side normalizer feasibility prototype |
 | L5 hard blocker | RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
@@ -66,7 +69,7 @@ Rules:
 |---|---|---|---|---|---|---|
 | L0 inventory | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | complete |
 | L1 source verification | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | use source matrix for model-axis catalog |
-| L2 semantic smoke | blocked-by-runner-build | - | - | - | - | requires semantic-first runner build + dry-run evidence |
+| L2 semantic smoke | blocked-by-commit-and-HP-dry-run | - | local dry-run validation complete on Main PC | - | - | requires commit/push, HP Z2 pull/dry-run, then separate L2 execution GO |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 real endpoint | blocked-hard | - | - | - | - | requires RA-03 checks + sufficient L2-L4 evidence + `Phase 2 heavy run GO` |
@@ -75,9 +78,9 @@ Rules:
 
 | Track | Scope | Status | Ladder dependency | Owner |
 |---|---|---|---|---|
-| Phase 2.1 design R1 -> R2 update | 4-lane mapping, scorer P7 placeholder rejection fix, acceptable citation set, model-axis catalog, C1-C7 hooks | complete-in-working-tree | required before L2 | Main PC Codex |
+| Phase 2.1 design R1 -> R2 update | 4-lane mapping, scorer P7 placeholder rejection fix, acceptable citation set, model-axis catalog, C1-C7 hooks | complete-committed | required before L2 | Main PC Codex |
 | Stage A-R lane reinterpretation | Reclassify existing Stage A-R / ModelOps results under 4 lanes and L0-L5 ladder | pending | useful before L2 comparisons | Main PC Codex |
-| Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | pending | required before L2 | Main PC Codex |
+| Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | complete-in-working-tree | required before L2 | Main PC Codex |
 | Normalizer adapter prototype | Runner-side only, eval scope, no EMR production write | pending | required before L3 | Main PC Codex |
 | L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | complete | safe first execution step | HP Z2 Codex |
 | RA-03 user-owned checks | Final input/citation/user-verdict checks required before real endpoint | pending | hard blocker before L5 | User |
@@ -90,6 +93,7 @@ Rules:
 | `HP Z2 L0 inventory + L1 source verification GO` | Refresh HP Z2 model inventory, C: free space, loaded model state, and source trust/quant/size verification | L0/L1 result packet + §5 archive entry | no model performance matrix, no cleanup, no download unless separately approved |
 | `Phase 2.1 design R1 -> R2 update GO` | Update design/eval docs with 4-lane mapping, scorer fix, acceptable citation set, model catalog, and C1-C7 hooks | design R2 diff/report | no heavy eval, no EMR write |
 | `HP Z2 semantic-first runner build GO` | Implement eval-only runner support for semantic fields and v0.2 metric hooks | tools/config docs + dry-run evidence | no `/explain`, no EMR write |
+| `Phase 2 L2 semantic runner commit/push GO` | Commit and push L2 semantic runner/config/docs/tracker updates | synced Main PC `origin/main` | no model execution, no `/explain`, no EMR write |
 | `HP Z2 L2 semantic smoke matrix GO` | Synthetic LM Studio-only semantic smoke over approved Tier models | L2 result packet + §5 archive entry | no real `/explain`; maintain C: >= 100 GB |
 | `HP Z2 L3 normalizer feasibility GO` | Runner-side conversion of model output to `{summary, citations}` | L3 result packet + normalizer notes | no production normalizer change |
 | `HP Z2 L4 native contract check GO` | Strict JSON/schema convenience check | L4 result packet | native contract does not override semantic gate |
@@ -136,15 +140,17 @@ Append new result entries below. Keep old entries intact.
 
 ### L2 semantic smoke matrix
 
-- Status: blocked-by-runner-build
+- Status: blocked-by-commit-and-HP-dry-run
 - GO issued: -
 - Artifact: -
 - Required before entry:
   - L0/L1 reviewed: complete
-  - design R2 updated: complete in working tree
-  - semantic-first runner built or selected: pending
+  - design R2 updated: complete committed at `f3d0a9e`
+  - semantic-first runner built or selected: complete in working tree
+  - Main PC dry-run validation: complete, no lms/model/API/app calls
+  - HP Z2 pull/dry-run validation: pending
 - Reviewer verdict: -
-- Next GO: `HP Z2 semantic-first runner build GO`
+- Next GO: `Phase 2 L2 semantic runner commit/push GO`
 
 ### L3 normalizer feasibility
 
@@ -203,3 +209,4 @@ Append new result entries below. Keep old entries intact.
 |---|---|---|
 | R0 | 2026-05-25 | Initial L0-L5 progress tracker. Snapshot all levels pending/blocked, added parallel tracks, GO carry, result archive placeholders, and STOP carry. |
 | R1 | 2026-05-25 | Incorporated HP Z2 L0/L1 inventory and source verification results from `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323`; marked L0/L1 complete, corrected current HEAD snapshot, and set next GO to semantic-first runner build before L2. |
+| R2 | 2026-05-25 | Added L2 synthetic semantic runner/config/runbook tracking. Main PC dry-run validation passed without lms commands, model loads, LM Studio API calls, production app calls, or EMR writes. L2 execution remains blocked until commit/push, HP Z2 pull/dry-run, and separate L2 semantic smoke matrix GO. |

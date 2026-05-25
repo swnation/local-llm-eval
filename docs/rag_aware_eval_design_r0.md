@@ -442,6 +442,12 @@ The cross-industry carry doc defines C1-C7 as later metric hooks. R2 does not re
 | **P3** | `HP Z2 L3 normalizer feasibility GO` | runner-side normalizer feasibility only, no EMR production write | Main PC/HP Z2 split after L2 review |
 | **P4** | `HP Z2 L4 native contract check GO` | strict JSON/schema convenience check on shortlist | HP Z2 Codex |
 | **P5** | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells only after RA-03 final checks + L2-L4 evidence | HP Z2 runner + Main PC docs |
+
+2026-05-25 runner-build carry: P1 is complete in the working tree via
+`tools/hpz2_lmstudio_phase2_l2_semantic_runner.py` and
+`models_config_hpz2_lmstudio_phase2_l2_semantic_v0.1.json`. The next Main PC
+GO is `Phase 2 L2 semantic runner commit/push GO`, then HP Z2 pull/dry-run
+before any L2 execution GO.
 | (대기) | `Phase 1d GO + 후보 N` | Phase 1d 후보 1/2 진입 — Phase 2 결과 carry 후 사용자 결정 | 사용자 |
 | (대기) | `Phase 2 tracker/design R2 commit/push GO` | docs/spec changes in `local-llm-eval` only | Main PC Codex |
 
@@ -458,4 +464,4 @@ The cross-industry carry doc defines C1-C7 as later metric hooks. R2 does not re
 
 ---
 
-**End of RAG-aware Evaluation Design R2 pre-L2 update.** 다음 단계 = `HP Z2 semantic-first runner build GO` 발행 시 진입.
+**End of RAG-aware Evaluation Design R2.1 L2 runner build update.** Next Main PC step = `Phase 2 L2 semantic runner commit/push GO`; next HP Z2 step after that = pull and dry-run only.

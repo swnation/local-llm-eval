@@ -2,15 +2,18 @@
 id: hpz2-modelops-operational-constraints-v0.1
 project: local-llm-eval
 type: runbook
-status: draft
+status: draft-updated
 version: 0.1
 created: 2026-05-25
-updated: 2026-05-25
-scope: HP Z2 LM Studio/Vulkan model selection, disk guardrails, and pre-heavy ModelOps testing
+updated: 2026-05-26
+scope: HP Z2 llama.cpp primary / LM Studio secondary model selection, disk guardrails, and pre-heavy ModelOps testing
 related:
   - docs/rag-goals-evaluation-principles-v0.1.md
   - docs/hpz2-lmstudio-phase2-stage-a-config-2026-05-24.md
   - docs/hpz2-lmstudio-phase2-stage-ar-model-aware-2026-05-24.md
+  - docs/hpz2-phase2-backend-lane-decision-2026-05-26.md
+  - docs/hpz2-llamacpp-phase2-l2-runner-2026-05-26.md
+  - models_config_hpz2_llamacpp_phase2_l2_v0.1.json
   - ../../hpz2-run-artifacts/scripts/modelops_profile_matrix.py
   - ../../hpz2-run-artifacts/scripts/modelops_select_and_cleanup.py
 ---
@@ -31,7 +34,8 @@ of the RAG principles document:
 - how to treat very large downloads
 - how to keep `C:` free space above the hard floor
 - how to cycle through installed models, cleanup, download, and retest
-- how to keep LM Studio/Vulkan results separate from legacy Ollama context
+- how to keep llama.cpp primary results, LM Studio secondary results, and
+  legacy Ollama context separate
 
 The canonical workspace for this document is the main PC repo. HP Z2 remains
 execution-only.
@@ -40,7 +44,7 @@ execution-only.
 
 | Guardrail | Rule |
 |---|---|
-| Runtime lane | LM Studio / llama.cpp Vulkan only for this track |
+| Runtime lane | llama.cpp direct `llama-server.exe` is primary; LM Studio is secondary/manual; legacy Ollama is historical only |
 | Heavy run | blocked until explicit user GO |
 | Real endpoint | no Phase 2 `/explain` execution without explicit user GO |
 | EMR repo | no `EMR_AI_24clinic` writes without explicit user GO |
@@ -52,6 +56,31 @@ execution-only.
 
 If any step would violate the disk floor, stop before download or cleanup and
 report the blocker.
+
+## 1.1 Backend Lane Lock
+
+Backend lane decision lock (2026-05-26):
+
+- Primary HP Z2 L2/L3 candidate evaluation backend: direct llama.cpp
+  `llama-server.exe`.
+- Secondary lane: LM Studio for manual model management, UI inspection, and
+  historical/secondary comparison.
+- LM Studio L2 results remain preserved evidence; they are not deleted or
+  reinterpreted as failed.
+
+Primary llama.cpp profile:
+
+```powershell
+-c 16384 -n 8192 `
+-dev Vulkan0 -ngl all -sm none -mg 0 `
+--no-mmap --no-host --kv-offload --op-offload -fa on `
+-ctk q8_0 -ctv q8_0 `
+--cache-ram 0 --no-cache-prompt --ctx-checkpoints 0 `
+-b 1024 -ub 256 -np 1 --reasoning off
+```
+
+GPT-OSS GGUF models require `--skip-chat-parsing`. If a model regresses under
+the default batch profile, fallback to `-b 256 -ub 64` before broadening scope.
 
 ## 2. Model Priority Policy
 
@@ -113,9 +142,9 @@ Use the lightest useful test before moving toward heavier work:
 |---|---|---:|---:|
 | L0 inventory | `lms ls`, model sizes, disk free, loaded model state | no | yes |
 | L1 source verification | official/Unsloth model card, quant, file size, license, compatibility | no | yes |
-| L2 synthetic semantic smoke | short RAG-like prompts through LM Studio only | no `/explain` | requires explicit ModelOps test GO |
+| L2 synthetic semantic smoke | short RAG-like prompts through llama.cpp primary or LM Studio secondary | no `/explain` | requires explicit ModelOps test GO |
 | L3 normalizer feasibility | runner-side parsing to `{summary, citations}` | no `/explain` | requires explicit normalizer/test GO |
-| L4 native contract check | strict JSON/schema behavior in LM Studio | no `/explain` | requires explicit ModelOps test GO |
+| L4 native contract check | strict JSON/schema behavior, secondary to semantic quality | no `/explain` | requires explicit ModelOps test GO |
 | L5 real endpoint | actual `/explain` Phase 2 cell | yes | blocked until Phase 2 heavy run GO |
 
 L2-L4 can make a model eligible for heavy-run consideration, but cannot declare
@@ -198,3 +227,4 @@ Given the current direction:
 | Version | Date | Change |
 |---|---|---|
 | R0 draft | 2026-05-25 | Initial HP Z2 ModelOps operational constraints runbook. Captures disk floor, model priority policy, installed snapshot, pre-heavy test ladder, cleanup loop, and STOP carry. |
+| R1 backend lane | 2026-05-26 | Added llama.cpp primary / LM Studio secondary backend lane lock, direct llama-server profile, GPT-OSS parser override, and L2 ladder wording update. |

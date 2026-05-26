@@ -21,6 +21,7 @@ Current planning artifacts:
 - `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.1, with R2 four-lane/P7/acceptable-citation additions
 - `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json` = Phase 2 Stage A LM Studio config R0.2 (includes all HP Z2 LM Studio smoke-pass models + execution pacing)
 - `models_config_hpz2_lmstudio_phase2_l2_semantic_v0.1.json` = L2 synthetic semantic smoke config over HP Z2 L0/L1 model catalog
+- `models_config_hpz2_llamacpp_phase2_l2_v0.1.json` = primary HP Z2 llama.cpp L2 synthetic semantic config after backend lane decision lock (2026-05-26); LM Studio L2 remains secondary/historical
 
 Phase 2 heavy run remains blocked until:
 
@@ -31,12 +32,18 @@ RA-03 is resolved as `sme + trimesy + lacto2`, `dx=a090`, pediatric `age=1`; exp
 
 ## Current Runner Baseline
 
-Phase 2 model viability baselines should now be measured on the official HP Z2 runner:
+Phase 2 model viability baselines should now be measured on the official HP Z2 runner. Backend lane lock (2026-05-26): llama.cpp is primary for HP Z2 L2/L3 candidate evaluation; LM Studio remains secondary for manual inspection, model management, and historical comparison.
 
 - Execution host: HP Z2 Mini G1a
-- Backend lane under test: LM Studio
-- Runtime: llama.cpp Vulkan
-- Load profile: `--gpu max --context-length 4096 --ttl 120`
+- Primary backend lane: llama.cpp `llama-server.exe`
+- Primary runtime: llama.cpp Vulkan on `Vulkan0`
+- Primary config: `models_config_hpz2_llamacpp_phase2_l2_v0.1.json`
+- Primary runner: `tools/hpz2_llamacpp_phase2_l2_runner.py`
+- Primary runbook: `docs/hpz2-llamacpp-phase2-l2-runner-2026-05-26.md`
+- Backend decision note: `docs/hpz2-phase2-backend-lane-decision-2026-05-26.md`
+- Primary load profile: `--no-mmap --no-host --kv-offload --op-offload -fa on -ctk q8_0 -ctv q8_0 -b 1024 -ub 256 --reasoning off`; add `--skip-chat-parsing` for GPT-OSS GGUF models.
+- Secondary backend lane: LM Studio / llama.cpp Vulkan
+- Secondary load profile: `--gpu max --context-length 4096 --ttl 120`
 - Smoke config: `models_config_hpz2_lmstudio_smoke_v0.1.json`
 - Smoke prompt: `prompts/hpz2_lmstudio_smoke_v0.1.json`
 - Runbook: `docs/hpz2-lmstudio-official-smoke-baseline-2026-05-24.md`
@@ -48,10 +55,11 @@ Phase 2 model viability baselines should now be measured on the official HP Z2 r
 - Phase 2 L2 semantic config: `models_config_hpz2_lmstudio_phase2_l2_semantic_v0.1.json`
 - Phase 2 L2 semantic runner: `tools/hpz2_lmstudio_phase2_l2_semantic_runner.py`
 - Phase 2 L2 semantic runbook: `docs/hpz2-lmstudio-phase2-l2-semantic-runner-2026-05-25.md`
+- LM Studio L2 semantic lane: secondary/historical comparison only after the llama.cpp primary lane lock. Keep these files; do not delete or reinterpret them as failed.
 - Phase 2 Stage A pacing: unload before/after each model, confirm `lms status` has no loaded models, wait 90s after unload, wait 180s after large models or failures.
 - Phase 2 Stage A-R load profile: `--gpu max --context-length 32768 --ttl 3600 -y` on HP Z2. Stage A strict baseline remains `4096`.
 - Stage A-R does not replace the Stage A strict endpoint baseline; use it only to test model-aware profiles such as Qwen `/no_think`, gpt-oss reasoning hints, Granite RAG/extraction settings, Gemma sampling, and LM Studio JSON schema output.
-- L2 semantic smoke does not use the real endpoint. Its dry-run is config/spec validation only. Actual HP Z2 model execution requires a separate `HP Z2 L2 semantic smoke matrix GO`.
+- L2 semantic smoke does not use the real endpoint. Its dry-run is config/spec validation only. Actual HP Z2 model execution requires a separate HP execution GO for the selected backend.
 
 The main PC remains the canonical workspace for review, documentation, commit, and push. HP Z2 is execution-only unless the user explicitly changes that rule.
 

@@ -143,10 +143,8 @@ def dedupe_args(args: list[str]) -> list[str]:
                 del result[existing_idx:existing_idx + 2]
             result.extend([item, args[idx + 1]])
             idx += 2
-        elif item not in result or item.startswith("-"):
-            result.append(item)
-            idx += 1
         else:
+            result.append(item)
             idx += 1
     return result
 

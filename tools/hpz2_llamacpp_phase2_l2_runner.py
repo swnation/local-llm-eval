@@ -400,7 +400,12 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[st
                     options = merged_inference_options(config, model)
                     response = call_chat_completion(server_url(runtime), str(model.get("served_model_id")), system, user, options)
                     normalized = response.get("text", "")
-                    lanes = evaluate_semantic_lanes(normalized, case, eval_case, eval_set)
+                    lanes = evaluate_semantic_lanes(
+                        text=normalized,
+                        l2_case=case,
+                        eval_case=eval_case,
+                        eval_set=eval_set,
+                    )
                     row["cases"].append(
                         {
                             "case_id": case["case_id"],

@@ -5,7 +5,7 @@ type: progress-tracking
 status: live
 version: 0.1
 created: 2026-05-25
-updated: 2026-05-26
+updated: 2026-05-27
 scope: Single source of truth for HP Z2 Phase 2 L0-L5 ladder progress
 related:
   - docs/rag-goals-evaluation-principles-v0.1.md
@@ -22,6 +22,7 @@ related:
   - tools/hpz2_llamacpp_phase2_l2_runner.py
   - docs/hpz2-llamacpp-phase2-l2-runner-2026-05-26.md
   - docs/hpz2-phase2-backend-lane-decision-2026-05-26.md
+  - docs/hpz2-phase2-l2-shortlist-lock-2026-05-27.md
 ---
 
 # HP Z2 Phase 2 Ladder Progress v0.1
@@ -57,12 +58,12 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane decision locked / repo-side llama.cpp runner draft built |
-| Current repo HEAD | `f4215f6` (`feat(rag): enforce HP Z2 L2 runner pacing + free-space gates`) before this repo-side llama.cpp draft |
-| Current tracker status | live R4 working tree, llama.cpp primary backend runner/config/docs in progress |
-| Next recommended GO | `HP Z2 llama.cpp L2 primary_fast dry-run/pilot GO` after review + commit/push |
-| L2 blocker | repo-side llama.cpp runner review + commit/push + HP Z2 pull/dry-run; model execution remains separate GO |
-| L3 blocker | L2 primary lane review + runner-side normalizer feasibility prototype |
+| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked |
+| Current repo HEAD | `b53fb7f` (`fix(rag): call semantic scorer with keywords`) before this shortlist codify update |
+| Current tracker status | live R5 working tree, shortlist codification in progress |
+| Next recommended GO | review + commit/push this shortlist codification; then decide L3 normalizer feasibility or L5 heavy-run planning |
+| L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
+| L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
 | L5 hard blocker | RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
 | Runtime lane | llama.cpp primary / LM Studio secondary, not Ollama |
@@ -73,7 +74,7 @@ Rules:
 |---|---|---|---|---|---|---|
 | L0 inventory | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | complete |
 | L1 source verification | complete | 2026-05-25 | 2026-05-25 | `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_202323` | accepted-for-design-R2 | use source matrix for model-axis catalog |
-| L2 semantic smoke | primary-lane-transition | 2026-05-26 | LM Studio L2 completed as secondary; llama.cpp full matrix completed and backend lane locked | `C:\Github\hpz2-run-artifacts\results\llamacpp_vram_full_matrix_20260526_180420` | backend-lane-accepted-for-runner-build | repo-side llama.cpp runner review, commit/push, HP Z2 dry-run/pilot GO |
+| L2 semantic smoke | complete-shortlist-locked | 2026-05-26/27 | LM Studio L2 completed as secondary; llama.cpp full matrix and bonus probes completed; shortlist locked | `C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md` | accepted-for-shortlist-codify | repo review + commit/push; then L3 or L5 planning decision |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 real endpoint | blocked-hard | - | - | - | - | requires RA-03 checks + sufficient L2-L4 evidence + `Phase 2 heavy run GO` |
@@ -86,7 +87,8 @@ Rules:
 | Stage A-R lane reinterpretation | Reclassify existing Stage A-R / ModelOps results under 4 lanes and L0-L5 ladder | pending | useful before L2 comparisons | Main PC Codex |
 | Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | complete-committed | required before L2 | Main PC Codex |
 | L2 LM Studio runner pacing enforcement | Enforce no-loaded-model, cooldown, failure recovery, and C: free-space gates from `_execution_pacing` | complete-committed | secondary lane carry | Main PC Codex |
-| L2 llama.cpp primary backend runner | Direct `llama-server.exe` lifecycle, no-mmap/Vulkan/Q8KV profile, GPT-OSS parser override, LM Studio-compatible artifact surface | in-working-tree | required before primary lane pilot | Main PC Codex |
+| L2 llama.cpp primary backend runner | Direct `llama-server.exe` lifecycle, no-mmap/Vulkan/Q8KV profile, GPT-OSS parser override, LM Studio-compatible artifact surface | complete-committed | required before primary lane pilot and full matrix | Main PC Codex |
+| L2 shortlist codification | Promote final primary/reference/exclusion decision into repo docs/config | in-working-tree | required before L3/L5 planning handoff | Main PC Codex |
 | Normalizer adapter prototype | Runner-side only, eval scope, no EMR production write | pending | required before L3 | Main PC Codex |
 | L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | complete | safe first execution step | HP Z2 Codex |
 | RA-03 user-owned checks | Final input/citation/user-verdict checks required before real endpoint | pending | hard blocker before L5 | User |
@@ -104,6 +106,7 @@ Rules:
 | `HP Z2 L2 semantic smoke matrix GO` | Synthetic LM Studio-only semantic smoke over approved Tier models | L2 result packet + §5 archive entry | no real `/explain`; maintain C: >= 100 GB |
 | `Codex handoff packet: repo-side llama.cpp 갱신 GO` | Add primary llama.cpp config/runner/docs and update tracker/AGENTS/ModelOps docs | repo diff + dry-run validation | no model execution, no `/explain`, no EMR write, no commit/push |
 | `HP Z2 llama.cpp L2 primary_fast dry-run/pilot GO` | Pull reviewed runner on HP and run selected llama.cpp primary tier only | llama.cpp L2 result packet | no `/explain`; maintain C: >= 100 GB; stop on memory/process/API/citation gates |
+| `shortlist codify GO` | Codify final L2 shortlist into AGENTS, llama.cpp config, tracker, runbook, and shortlist decision doc | repo diff + config dry-run validation | no model execution, no `/explain`, no EMR write, no cleanup/download; commit/push separate GO |
 | `HP Z2 L3 normalizer feasibility GO` | Runner-side conversion of model output to `{summary, citations}` | L3 result packet + normalizer notes | no production normalizer change |
 | `HP Z2 L4 native contract check GO` | Strict JSON/schema convenience check | L4 result packet | native contract does not override semantic gate |
 | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells | Phase 2 result packet | requires separate explicit GO, RA-03 checks, and EMR read-only constraints |
@@ -162,6 +165,33 @@ Append new result entries below. Keep old entries intact.
   - HP Z2 execution attempt: STOP before model execution because pinned runner did not enforce `_execution_pacing`
 - Reviewer verdict: pacing patch required before execution
 - Next GO: `Phase 2 L2 runner pacing enforcement review GO`
+
+### L2 llama.cpp primary full matrix and shortlist lock
+
+- Status: complete-shortlist-locked
+- GO issued: HP Z2 conditional overnight llama.cpp execution sequence
+- Reported: 2026-05-27
+- Integrated report: `C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md`
+- Artifact repo commit: `80907506d07686e84df2cf6e9448b5c632a7dffd`
+- Primary full matrix:
+  - artifact: `C:\Github\hpz2-run-artifacts\results\llamacpp_phase2_l2_20260527_043835\`
+  - 13 models x 4 cases
+  - API ok: 52/52
+  - citation core/strong: 52/52
+  - semantic: 39/52
+  - manual review: 13/52, all RA-05 expected wording baseline
+- Bonus probes:
+  - Granite 4.1 30B official IBM GGUF passed L2 probe and entered primary shortlist.
+  - EXAONE 4.5 33B failed current llama.cpp `b9333` load probes; wait for upstream runtime support.
+  - Aya Expanse 32B ran but failed practical citation/semantic usefulness.
+  - K-EXAONE official IQ4_XS failed load; K-EXAONE Q2_K mradermacher is secondary-hold only.
+- Shortlist lock:
+  - primary: `hpz2-l2-qwen36-35b-a3b`, `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`, `hpz2-l2-qwen36-35b-a3b-mtp-q8`, `hpz2-l2-granite-41-30b-q4km`
+  - reference: Qwen 122B variants, GPT-OSS 120B, Mistral Small 24B, Llama 70B, Gemma 31B
+  - current primary exclusions: EXAONE 4.5, Aya Expanse, K-EXAONE official IQ4_XS, K-EXAONE Q2_K community fallback
+- Availability carry: 2026-05-27 cleanup removed many previously tested local model folders, so config `model_path` entries require fresh file-existence and download preflight before future execution.
+- Reviewer verdict: accepted-for-shortlist-codify
+- Next GO: review + commit/push this codification, then decide L3 normalizer feasibility or L5 heavy-run planning.
 
 ### L3 normalizer feasibility
 
@@ -223,3 +253,4 @@ Append new result entries below. Keep old entries intact.
 | R2 | 2026-05-25 | Added L2 synthetic semantic runner/config/runbook tracking. Main PC dry-run validation passed without lms commands, model loads, LM Studio API calls, production app calls, or EMR writes. L2 execution remains blocked until commit/push, HP Z2 pull/dry-run, and separate L2 semantic smoke matrix GO. |
 | R3 | 2026-05-26 | Recorded HP Z2 pre-execution STOP before model load because pinned L2 runner did not enforce `_execution_pacing`; added working-tree pacing enforcement patch tracking. |
 | R4 | 2026-05-26 | Locked llama.cpp as the primary HP Z2 backend lane with LM Studio as secondary evidence; added repo-side primary runner/config/docs tracking and next HP Z2 dry-run/pilot GO. |
+| R5 | 2026-05-27 | Codified overnight llama.cpp L2 full matrix, Granite bonus probe, current primary shortlist, reference set, and current primary exclusions. |

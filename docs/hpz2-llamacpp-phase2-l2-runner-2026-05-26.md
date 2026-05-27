@@ -64,8 +64,25 @@ Default tier is `primary_fast`:
 - `hpz2-l2-qwen36-35b-a3b`
 - `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`
 
-Other tiers are `primary_plus_reference`, `secondary_comparison`,
-`family_baseline_optional`, and `all`.
+Other tiers are `primary_shortlist`, `primary_plus_reference`,
+`secondary_comparison`, `reference_historical`, `family_baseline_optional`, and
+`all`.
+
+The 2026-05-27 shortlist lock defines `primary_shortlist` as:
+
+- `hpz2-l2-qwen36-35b-a3b`
+- `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`
+- `hpz2-l2-qwen36-35b-a3b-mtp-q8`
+- `hpz2-l2-granite-41-30b-q4km`
+
+The default tier remains `primary_fast` for narrow smoke checks. Do not infer
+permission to run `primary_shortlist`, `all`, L3/L4/L5, real `/explain`, EMR
+writes, cleanup, or downloads from the existence of these tiers.
+
+After the 2026-05-27 cleanup, some `model_path` files from the completed full
+matrix may no longer exist locally on HP Z2. Treat config paths as expected
+canonical locations. Any future execution needs a fresh file-existence, disk,
+and download preflight.
 
 ## Runtime Policy
 

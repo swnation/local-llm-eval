@@ -65,6 +65,35 @@ The main PC remains the canonical workspace for review, documentation, commit, a
 
 Earlier 5080, subpc, Ollama, or manual one-off results are exploratory only and must not be mixed into the official HP Z2 LM Studio/Vulkan speed baseline.
 
+## Phase 2 L2 Shortlist Lock
+
+Shortlist lock date: 2026-05-27. Evidence is captured in
+`C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md`
+at artifact repo commit `80907506d07686e84df2cf6e9448b5c632a7dffd`.
+
+Primary candidates for the next Phase 2 decision surface:
+
+- `hpz2-l2-qwen36-35b-a3b`
+- `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`
+- `hpz2-l2-qwen36-35b-a3b-mtp-q8`
+- `hpz2-l2-granite-41-30b-q4km`
+
+Reference/historical candidates remain useful for comparison, but are not the
+first-pass default: Qwen 122B A10B variants, GPT-OSS 120B, Mistral Small 24B,
+Llama 70B, and Gemma 31B.
+
+Do not promote these to the current primary shortlist without a separate review
+and user GO: EXAONE 4.5 33B under current llama.cpp `b9333`, Aya Expanse 32B,
+K-EXAONE 236B official IQ4_XS, or K-EXAONE 236B Q2_K mradermacher community
+fallback. The Q2_K K-EXAONE result is secondary viability evidence only.
+
+After the 2026-05-27 cleanup, config `model_path` values are expected canonical
+locations, not proof that files are still installed on HP. Future execution
+requires a fresh file-existence, disk, and download preflight.
+
+This shortlist lock does not authorize L3, L4, L5, `/explain`, EMR writes,
+cleanup, downloads, model execution, commit, or push.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.

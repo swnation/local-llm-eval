@@ -1,6 +1,6 @@
 {
   "version": "0.1-llamacpp-l2-semantic",
-  "status": "R0 primary HP Z2 llama.cpp backend config after backend lane decision lock on 2026-05-26. Built on Main PC; no model execution is authorized by this file.",
+  "status": "R1 primary HP Z2 llama.cpp backend config after backend lane decision lock on 2026-05-26 and L2 shortlist lock on 2026-05-27. Built on Main PC; no model execution is authorized by this file.",
   "backend": "llama.cpp",
   "_stage_label": "HP Z2 Phase 2 L2 Semantic Smoke - llama.cpp primary lane",
   "_result_artifact_prefix": "hpz2_llamacpp_phase2_l2_semantic",
@@ -17,7 +17,8 @@
     "Do not call /explain from this runner or config.",
     "Do not commit or push without explicit user GO.",
     "Do not change RA-03 resolved values.",
-    "Do not enter L3, L4, L5, Stage B/C, cleanup, or download from this config."
+    "Do not enter L3, L4, L5, Stage B/C, cleanup, or download from this config.",
+    "Do not assume model_path files still exist after the 2026-05-27 cleanup; verify local files before any execution GO."
   ],
   "runtime": {
     "binary": "C:/github/llama-cpp-runtime/b9333/llama-server.exe",
@@ -168,6 +169,12 @@
   ],
   "_default_tier": "primary_fast",
   "_model_tiers": {
+    "primary_shortlist": [
+      "hpz2-l2-qwen36-35b-a3b",
+      "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "hpz2-l2-qwen36-35b-a3b-mtp-q8",
+      "hpz2-l2-granite-41-30b-q4km"
+    ],
     "primary_fast": [
       "hpz2-l2-qwen36-35b-a3b",
       "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4"
@@ -190,6 +197,14 @@
       "hpz2-l2-llama-33-70b-instruct",
       "hpz2-l2-gemma-4-31b-it"
     ],
+    "reference_historical": [
+      "hpz2-l2-qwen35-122b-a10b",
+      "hpz2-l2-qwen35-122b-a10b-mtp",
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-mistral-small-32-24b",
+      "hpz2-l2-llama-33-70b-instruct",
+      "hpz2-l2-gemma-4-31b-it"
+    ],
     "all": [
       "hpz2-l2-openai-gpt-oss-120b",
       "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
@@ -203,7 +218,51 @@
       "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
       "hpz2-l2-mistral-small-32-24b",
       "hpz2-l2-unsloth-gpt-oss-20b",
-      "hpz2-l2-openai-gpt-oss-20b"
+      "hpz2-l2-openai-gpt-oss-20b",
+      "hpz2-l2-granite-41-30b-q4km"
+    ]
+  },
+  "_shortlist_lock_20260527": {
+    "evidence_report": "C:\\Github\\hpz2-run-artifacts\\results\\hpz2_llamacpp_l2_integrated_report_20260527.md",
+    "artifact_commit": "80907506d07686e84df2cf6e9448b5c632a7dffd",
+    "model_availability_note": "The 2026-05-27 cleanup removed many previously tested local model folders. Treat model_path entries as the canonical expected paths, not proof that the files are currently present on HP. Any future execution requires a fresh file-existence, disk, and download preflight.",
+    "primary_labels": [
+      "hpz2-l2-qwen36-35b-a3b",
+      "hpz2-l2-qwen36-35b-a3b-mtp-mxfp4",
+      "hpz2-l2-qwen36-35b-a3b-mtp-q8",
+      "hpz2-l2-granite-41-30b-q4km"
+    ],
+    "reference_labels": [
+      "hpz2-l2-qwen35-122b-a10b",
+      "hpz2-l2-qwen35-122b-a10b-mtp",
+      "hpz2-l2-openai-gpt-oss-120b",
+      "hpz2-l2-mistral-small-32-24b",
+      "hpz2-l2-llama-33-70b-instruct",
+      "hpz2-l2-gemma-4-31b-it"
+    ],
+    "comparison_carry_labels": [
+      "hpz2-l2-google-gemma-4-26b-a4b",
+      "hpz2-l2-unsloth-gemma-4-26b-a4b-it",
+      "hpz2-l2-openai-gpt-oss-20b",
+      "hpz2-l2-unsloth-gpt-oss-20b"
+    ],
+    "do_not_use_primary": [
+      {
+        "label": "exaone-4.5-33b",
+        "reason": "llama.cpp b9333 loader/tensor-count mismatch in Q4_K_M and BF16 probes; wait for upstream runtime support"
+      },
+      {
+        "label": "aya-expanse-32b",
+        "reason": "API path worked, but L2 citation/semantic quality was poor"
+      },
+      {
+        "label": "k-exaone-236b-a23b-iq4xs-official",
+        "reason": "official GGUF default profile failed to load and did not terminate cleanly"
+      },
+      {
+        "label": "k-exaone-236b-a23b-q2k-mradermacher",
+        "reason": "community fallback quant passed L2, but is secondary viability evidence only"
+      }
     ]
   },
   "models": [
@@ -432,6 +491,27 @@
       ],
       "inference_options": {
         "profile": "gpt-oss-20b-official-skip-chat-parsing",
+        "response_format": "none",
+        "temperature": 0.0,
+        "max_tokens": 8192
+      }
+    },
+    {
+      "label": "hpz2-l2-granite-41-30b-q4km",
+      "backend": "llama.cpp",
+      "model_family": "ibm-granite/granite-4.1-30b",
+      "model_path": "C:\\Users\\test\\.lmstudio\\models\\ibm-granite\\granite-4.1-30b-GGUF\\granite-4.1-30b-Q4_K_M.gguf",
+      "served_model_id": "hpz2-l2-granite-41-30b-q4km",
+      "_tier": "primary",
+      "_source": "official ibm-granite GGUF",
+      "_quant": "Q4_K_M",
+      "_size_gib": 16.29,
+      "_source_repo": "ibm-granite/granite-4.1-30b-GGUF",
+      "_source_commit": "26a44ffe9923eea39af3ad811b56c9b0071e4347",
+      "_publisher_trust_tier": "official",
+      "_license": "apache-2.0",
+      "inference_options": {
+        "profile": "granite41-official-q4km-default-llamacpp",
         "response_format": "none",
         "temperature": 0.0,
         "max_tokens": 8192

@@ -2,8 +2,9 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implementation-ready
+status: implemented-step3-reviewed
 created: 2026-05-28
+updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
 ---
 
@@ -246,8 +247,41 @@ python -m unittest tests.test_hpz2_ollama_compat_llamacpp_shim
 - prompt/system/response가 로그에 남지 않음.
 - loopback-only bind/upstream 제한.
 
-## 현재 결론
+## 현재 상태
 
-이 shim이 통과하면 EMR 코드는 바꾸지 않아도 된다. 단, 이것은 L5 heavy
-run 실행 허가가 아니다. 다음 단계는 shim 구현 commit/push, HP pull,
-HP에서 fake/health preflight, 그 다음 별도 H1 `/explain` smoke GO다.
+Shim 구현은 main PC repo에 커밋되어 origin과 동기화된 상태다.
+
+```text
+21c6379e0fbb8c54d6932de0ee22a1b7a86277c8 feat(rag): add HP Z2 ollama llama.cpp shim
+```
+
+구현 범위는 3개 파일로 제한됐다.
+
+- `tools/hpz2_ollama_compat_llamacpp_shim.py`
+- `tests/test_hpz2_ollama_compat_llamacpp_shim.py`
+- `docs/hpz2-l5-ollama-shim-design-2026-05-28.md`
+
+Step 3 loopback health preflight는 HP Z2에서 완료됐고 shutdown까지 확인됐다.
+
+- `llama-server` loopback `:18080` health ok
+- shim loopback `:18081` health ok, upstream ok
+- `/explain`, `/api/generate`, EMR write, settings write, matrix, cleanup/download
+  미수행
+- shutdown 후 `llama-server`와 shim 프로세스 없음, ports `18080`/`18081` not
+  listening
+
+Shim review도 PASS / CONDITIONAL GO for H1로 닫혔다. EMR은 `/api/generate`를
+보내고 `response` 필드만 읽으며, shim 응답 계약은 여기에 맞는다.
+
+H1에서 확인할 carry:
+
+- 응답이 valid JSON인지 확인한다.
+- EMR 모델명과 llama.cpp served model/model-map 정합을 확인한다.
+- H2+ 품질 비교 전에는 schema fidelity를 재검토한다. 현재 shim은 EMR의 strict
+  `format` schema를 그대로 전달하지 않고 llama.cpp `response_format:
+  {"type":"json_object"}`만 보낸다.
+
+이 상태는 L5 heavy run 실행 허가가 아니다. 다음 허용 단계는 별도
+`H1 minimal /explain smoke plan GO`로 one-case scope, env override, RA-03
+check, JSON validity check, logging/PHI guard, shutdown boundary를 계획하는
+것이다. H1 실행은 그 계획 승인 뒤 별도 GO가 필요하다.

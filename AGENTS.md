@@ -94,6 +94,32 @@ requires a fresh file-existence, disk, and download preflight.
 This shortlist lock does not authorize L3, L4, L5, `/explain`, EMR writes,
 cleanup, downloads, model execution, commit, or push.
 
+## Current L5 Shim Baseline
+
+The HP Z2 Ollama-compatible llama.cpp shim is implemented and committed on the
+main PC at `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
+(`feat(rag): add HP Z2 ollama llama.cpp shim`).
+
+- Shim: `tools/hpz2_ollama_compat_llamacpp_shim.py`
+- Tests: `tests/test_hpz2_ollama_compat_llamacpp_shim.py`
+- Runbook: `docs/hpz2-l5-ollama-shim-design-2026-05-28.md`
+- Purpose: keep `EMR_AI_24clinic` unchanged by translating local Ollama
+  `POST /api/generate` calls to llama.cpp `POST /v1/chat/completions`.
+- Safety posture: loopback-only bind/upstream, `stream=true` rejected, request
+  size bounded, prompt/system/response bodies not logged.
+- Step 3 loopback health preflight: DONE on HP Z2, then shutdown confirmed
+  (`llama-server` and shim stopped; ports `18080` and `18081` not listening).
+- Shim review: PASS / CONDITIONAL GO for H1. EMR sends Ollama
+  `POST /api/generate` and reads only the `response` field; the shim contract
+  matches. Carry notes: H1 must confirm valid JSON and model-name mapping; H2+
+  quality comparisons must revisit schema fidelity because the shim currently
+  sends llama.cpp `response_format: {"type":"json_object"}` rather than the
+  stricter EMR `format` schema.
+
+This shim status does not authorize L5 or `/explain`. The next repo-side gate is
+`H1 minimal /explain smoke plan GO`; H1 execution itself requires a separate
+explicit execution GO after the plan is accepted.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.
@@ -102,4 +128,7 @@ cleanup, downloads, model execution, commit, or push.
 - Do not regenerate the 681 chunk baseline or touch chunk-variation work unless explicitly reopened.
 - Do not revert app prompt files for Stage C; use runner-side fixtures only if that stage is approved.
 - Do not change RA-03 resolved values or infer RA-01/RA-02/RA-05 expected wording; those are user-owned.
+- Do not treat shim health preflight as permission to call `/explain`.
+- Do not treat shim review PASS as permission to call `/explain`; H1 still needs
+  a plan GO and a separate execution GO.
 - Do not commit or push unless explicitly requested.

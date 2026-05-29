@@ -5,7 +5,7 @@ type: progress-tracking
 status: live
 version: 0.1
 created: 2026-05-25
-updated: 2026-05-27
+updated: 2026-05-30
 scope: Single source of truth for HP Z2 Phase 2 L0-L5 ladder progress
 related:
   - docs/rag-goals-evaluation-principles-v0.1.md
@@ -58,15 +58,15 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked |
-| Current repo HEAD | `b53fb7f` (`fix(rag): call semantic scorer with keywords`) before this shortlist codify update |
-| Current tracker status | live R5 working tree, shortlist codification in progress |
-| Next recommended GO | review + commit/push this shortlist codification; then decide L3 normalizer feasibility or L5 heavy-run planning |
+| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS |
+| Current repo HEAD | `21c6379` (`feat(rag): add HP Z2 ollama llama.cpp shim`) |
+| Current tracker status | live R7 doc-sync before commit; repo has only the three doc-sync files dirty |
+| Next recommended GO | `H1 minimal /explain smoke plan GO`, or commit/push this doc-sync before H1 |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
-| L5 hard blocker | RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
+| L5 hard blocker | H1 plan/result + RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
-| Runtime lane | llama.cpp primary / LM Studio secondary, not Ollama |
+| Runtime lane | llama.cpp primary / LM Studio secondary; L5 shim provides local Ollama-compatible adapter only |
 
 ## 2. Ladder Status Snapshot
 
@@ -77,7 +77,8 @@ Rules:
 | L2 semantic smoke | complete-shortlist-locked | 2026-05-26/27 | LM Studio L2 completed as secondary; llama.cpp full matrix and bonus probes completed; shortlist locked | `C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md` | accepted-for-shortlist-codify | repo review + commit/push; then L3 or L5 planning decision |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
-| L5 real endpoint | blocked-hard | - | - | - | - | requires RA-03 checks + sufficient L2-L4 evidence + `Phase 2 heavy run GO` |
+| L5 shim adapter | implemented-reviewed | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS / CONDITIONAL GO for H1 | H1 plan next; no `/explain` without separate GO |
+| L5 real endpoint | blocked-hard | - | - | - | - | requires H1 plan/result, RA-03 checks, sufficient L2-L4 evidence, and `Phase 2 heavy run GO` |
 
 ## 3. Parallel Track Status
 
@@ -88,8 +89,9 @@ Rules:
 | Semantic-first runner build | Add or adapt local-llm-eval runner for semantic fields and v0.2 metric hooks | complete-committed | required before L2 | Main PC Codex |
 | L2 LM Studio runner pacing enforcement | Enforce no-loaded-model, cooldown, failure recovery, and C: free-space gates from `_execution_pacing` | complete-committed | secondary lane carry | Main PC Codex |
 | L2 llama.cpp primary backend runner | Direct `llama-server.exe` lifecycle, no-mmap/Vulkan/Q8KV profile, GPT-OSS parser override, LM Studio-compatible artifact surface | complete-committed | required before primary lane pilot and full matrix | Main PC Codex |
-| L2 shortlist codification | Promote final primary/reference/exclusion decision into repo docs/config | in-working-tree | required before L3/L5 planning handoff | Main PC Codex |
+| L2 shortlist codification | Promote final primary/reference/exclusion decision into repo docs/config | complete-committed | required before L3/L5 planning handoff | Main PC Codex |
 | Normalizer adapter prototype | Runner-side only, eval scope, no EMR production write | pending | required before L3 | Main PC Codex |
+| L5 Ollama-compatible shim adapter | Translate local Ollama `/api/generate` to llama.cpp `/v1/chat/completions` without EMR code changes | complete-reviewed | required before H1 smoke | Main PC Codex |
 | L0 inventory + L1 source verification | Refresh `lms ls`, loaded state, C: free space, source/model-card trust matrix | complete | safe first execution step | HP Z2 Codex |
 | RA-03 user-owned checks | Final input/citation/user-verdict checks required before real endpoint | pending | hard blocker before L5 | User |
 | Claude/read-only review | Review tracker updates, design R2, L0-L5 result packets | standby | after each result report | HP Z2 Claude |
@@ -109,6 +111,8 @@ Rules:
 | `shortlist codify GO` | Codify final L2 shortlist into AGENTS, llama.cpp config, tracker, runbook, and shortlist decision doc | repo diff + config dry-run validation | no model execution, no `/explain`, no EMR write, no cleanup/download; commit/push separate GO |
 | `HP Z2 L3 normalizer feasibility GO` | Runner-side conversion of model output to `{summary, citations}` | L3 result packet + normalizer notes | no production normalizer change |
 | `HP Z2 L4 native contract check GO` | Strict JSON/schema convenience check | L4 result packet | native contract does not override semantic gate |
+| `HP Z2 shim Step 3 loopback health preflight GO` | Verify HP repo state, ensure no stale server process, start one loopback llama.cpp server, start loopback shim, and check shim `/health` | Step 3 health preflight packet | no `/explain`, no EMR write, no settings file write, no model matrix, no cleanup/download |
+| `H1 minimal /explain smoke plan GO` | Plan a one-case H1 smoke with preflight, env override, JSON validity check, logging/PHI guard, and shutdown boundary | H1 plan packet | plan only; no `/explain`, no EMR write, no settings file write, no model matrix |
 | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells | Phase 2 result packet | requires separate explicit GO, RA-03 checks, and EMR read-only constraints |
 | `Phase 2 ladder tracker commit + push GO` | Commit tracker changes | git commit/push | docs only unless explicitly broadened |
 
@@ -221,6 +225,7 @@ Append new result entries below. Keep old entries intact.
 - GO issued: -
 - Artifact: -
 - Required before entry:
+  - H1 minimal `/explain` smoke plan/result reviewed
   - RA-03 user-owned checks complete
   - sufficient L2-L4 evidence
   - explicit `Phase 2 heavy run GO`
@@ -228,10 +233,44 @@ Append new result entries below. Keep old entries intact.
 - Reviewer verdict: -
 - Next GO: pending
 
+### L5 Ollama-compatible shim adapter
+
+- Status: implemented-reviewed
+- GO issued: shim implementation gate
+- Reported: 2026-05-28; Step 3/review updated 2026-05-30
+- Commit: `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
+- Files:
+  - `tools/hpz2_ollama_compat_llamacpp_shim.py`
+  - `tests/test_hpz2_ollama_compat_llamacpp_shim.py`
+  - `docs/hpz2-l5-ollama-shim-design-2026-05-28.md`
+- Scope:
+  - local loopback adapter from Ollama `/api/generate` to llama.cpp `/v1/chat/completions`
+  - no EMR code changes
+  - no `/explain`
+  - no model execution authorized by the commit
+- Step 3 health preflight:
+  - HP hostname `HPCHECK`
+  - local-llm-eval `21c6379` clean on HP
+  - selected model file exists
+  - llama-server `127.0.0.1:18080` health ok
+  - shim `127.0.0.1:18081` health ok and upstream ok
+  - stopped at `/health`
+  - shutdown confirmed no shim/llama-server process and no `18080`/`18081` listeners
+- Reviewer verdict: PASS / CONDITIONAL GO for H1
+- Review carry:
+  - EMR `ollama_client.py` sends `/api/generate` and reads only `response`; shim contract matches.
+  - H1 must confirm valid JSON and model-name mapping.
+  - H2+ quality comparisons must revisit schema fidelity because the shim maps strict EMR `format` to llama.cpp `json_object` only.
+- Next GO: `H1 minimal /explain smoke plan GO`
+
 ## 6. STOP Carry
 
 - No heavy eval without explicit GO.
 - No real `/explain` without explicit `Phase 2 heavy run GO`.
+- No shim Step 3 health preflight without explicit Step 3 GO.
+- No H1 `/explain` smoke from shim health success alone.
+- No H1 `/explain` smoke from shim review PASS alone; H1 needs a plan GO and a
+  separate execution GO.
 - No EMR_AI_24clinic write without explicit GO.
 - No RA-03 changes or inferred replacement values without explicit user instruction.
 - No Stage B/C expansion without explicit GO.
@@ -254,3 +293,5 @@ Append new result entries below. Keep old entries intact.
 | R3 | 2026-05-26 | Recorded HP Z2 pre-execution STOP before model load because pinned L2 runner did not enforce `_execution_pacing`; added working-tree pacing enforcement patch tracking. |
 | R4 | 2026-05-26 | Locked llama.cpp as the primary HP Z2 backend lane with LM Studio as secondary evidence; added repo-side primary runner/config/docs tracking and next HP Z2 dry-run/pilot GO. |
 | R5 | 2026-05-27 | Codified overnight llama.cpp L2 full matrix, Granite bonus probe, current primary shortlist, reference set, and current primary exclusions. |
+| R6 | 2026-05-30 | Synced tracker to shim implementation commit `21c6379`, marked shortlist codification complete-committed, added L5 shim adapter status, and set next narrow runtime gate to `HP Z2 shim Step 3 loopback health preflight GO`. |
+| R7 | 2026-05-30 | Synced tracker after HP Step 3 health preflight/shutdown and Claude shim review PASS. Next gate is H1 minimal `/explain` smoke planning, not execution. |

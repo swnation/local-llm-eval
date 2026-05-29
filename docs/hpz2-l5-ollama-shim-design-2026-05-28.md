@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed-h1-plan-r8
+status: implemented-step3-reviewed-h1-pass-r9
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -279,6 +279,71 @@ happen: `context_insufficient`, `citation_failed`, model not found, timeout,
 unavailable, invalid JSON, PHI hit, dirty repo, health failure, model file
 missing, or unexpected runtime argument drift.
 
+## H1 RA-03 Tunneled Smoke Result R9
+
+Status: PASS as a one-case endpoint-readiness smoke. This is not a Phase 2
+heavy run authorization.
+
+Execution topology:
+
+```text
+Main PC EMR .venv harness
+  -> SSH tunnel on Main PC 127.0.0.1:18081
+  -> HP Z2 loopback shim 127.0.0.1:18081
+  -> HP Z2 loopback llama-server 127.0.0.1:18080
+```
+
+Audit pins:
+
+- Main PC `EMR_AI_24clinic`: `543e1f9ef5a0e4fcb49c47e4a55b0e5e661a6944`
+- Main PC `local-llm-eval`: `0f2da81`
+- HP `EMR_AI_24clinic`: clean at `543e1f9`
+- HP `local-llm-eval`: clean at `0f2da81`
+- HP runtime report before execution: `llama-server` health ok and shim
+  `/health` status ok with `upstream.status=ok`
+- Successful tunnel target: `test@192.168.68.50`; the `hpcheck` alias had
+  host-key verification drift and should not be assumed for the next run.
+
+Harness boundary:
+
+- Exactly one RA-03 `/explain` request.
+- RA-03 values stayed locked: `sme + trimesy + lacto2`, `dx=a090`, `age=1`.
+- Process env override only:
+  `EMR_LLM_ENABLED=true`, `EMR_LLM_PROVIDER=ollama`,
+  `EMR_LLM_MODEL=hpz2-l2-qwen36-35b-a3b`,
+  `EMR_LLM_HOST=http://127.0.0.1:18081`,
+  `EMR_LLM_TIMEOUT_SECONDS=300`.
+- No `data/llm_settings.json` write, no EMR repo edit, no
+  `scripts/smoke_test_explain.py`, no second request.
+
+PHI-safe result metadata:
+
+- HTTP status: `200`
+- EMR status: `ok`
+- raw LLM text valid JSON: yes
+- JSON has `summary` and `citations`: yes
+- citation verifier: pass
+- PHI hit count: `0`
+- retrieved chunks: `5`
+- citations count: `2`
+- latency: `17554 ms`
+- wall time: `17565 ms`
+- Main PC local tunnel listener after teardown: none
+- Main PC `EMR_AI_24clinic` and `local-llm-eval` remained clean
+
+Carry:
+
+- H1 confirms the shim plumbing, model-name mapping, valid JSON output, citation
+  verification, and PHI-zero metadata for one RA-03 request.
+- H1 does not prove model quality or authorize additional cases, a matrix,
+  cleanup/download, EMR writes, or `Phase 2 heavy run GO`.
+- H2+ quality conclusions still require a schema-fidelity decision. The shim
+  currently sends llama.cpp `response_format: {"type":"json_object"}` rather
+  than forwarding the strict EMR `format` schema.
+- If HP runtime shutdown is not separately confirmed after the tunneled H1 run,
+  verify/stop the H1 `llama-server` and shim processes before any next HP
+  runtime work.
+
 ## STOP 조건
 
 즉시 중단:
@@ -351,7 +416,8 @@ H1에서 확인할 carry:
   `format` schema를 그대로 전달하지 않고 llama.cpp `response_format:
   {"type":"json_object"}`만 보낸다.
 
-이 상태는 L5 heavy run 실행 허가가 아니다. 다음 허용 단계는 별도
-`H1 minimal /explain smoke plan GO`로 one-case scope, env override, RA-03
-check, JSON validity check, logging/PHI guard, shutdown boundary를 계획하는
-것이다. H1 실행은 그 계획 승인 뒤 별도 GO가 필요하다.
+R9 addendum: H1 RA-03 tunneled smoke has passed as a one-case
+endpoint-readiness check. This does not authorize L5 heavy run, additional
+`/explain` cases, matrix execution, EMR writes, cleanup, or downloads. Before
+the next HP runtime step, confirm the H1 runtime processes are shut down if that
+shutdown was not already reported separately.

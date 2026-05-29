@@ -116,9 +116,8 @@ main PC at `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
   sends llama.cpp `response_format: {"type":"json_object"}` rather than the
   stricter EMR `format` schema.
 
-This shim status does not authorize L5 or `/explain`. The next repo-side gate is
-`H1 minimal /explain smoke plan GO`; H1 execution itself requires a separate
-explicit execution GO after the plan is accepted.
+This shim status by itself does not authorize L5 or `/explain`; H1 execution
+requires a separate explicit execution GO after the plan is accepted.
 
 R8 H1 plan correction (2026-05-30):
 
@@ -139,6 +138,32 @@ R8 H1 plan correction (2026-05-30):
   only, must not use `scripts/smoke_test_explain.py`, and must include JSON
   validity, citation verifier, PHI-zero, repo-dirty, and teardown checks.
 
+R9 H1 RA-03 result sync (2026-05-30):
+
+- H1 tunneled one-case smoke PASS was reported through the split topology:
+  Main PC EMR `.venv` harness -> SSH tunnel `127.0.0.1:18081` ->
+  HP Z2 loopback shim -> HP Z2 loopback `llama-server`.
+- Audit pins at execution: Main PC `EMR_AI_24clinic` `543e1f9`, Main PC
+  `local-llm-eval` `0f2da81`, HP `EMR_AI_24clinic` `543e1f9`, HP
+  `local-llm-eval` `0f2da81`.
+- Harness scope: exactly one RA-03 `/explain` request, env override only,
+  no `data/llm_settings.json` write, no EMR repo edits, no
+  `scripts/smoke_test_explain.py`.
+- PHI-safe result metadata: HTTP 200, EMR status `ok`, raw LLM text valid JSON,
+  JSON has `summary` and `citations`, citation verifier passed, PHI hit count
+  `0`, retrieved chunks `5`, citation count `2`, latency `17554 ms`, wall time
+  `17565 ms`, both repos remained clean.
+- SSH tunnel note: `hpcheck` alias hit host-key verification drift; the
+  successful path used `test@192.168.68.50`.
+- Carry: this H1 PASS is a plumbing/readiness signal only. It does not authorize
+  Phase 2 heavy run, additional cases, matrix execution, EMR writes, cleanup,
+  downloads, or H2+ quality conclusions. H2+ quality comparisons must revisit
+  schema fidelity because the shim still maps EMR strict `format` schema to
+  llama.cpp `json_object`.
+- Runtime carry: if HP runtime shutdown is not separately confirmed after the
+  tunneled H1 run, verify/stop the H1 `llama-server` and shim processes before
+  any next HP runtime work.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.
@@ -152,4 +177,6 @@ R8 H1 plan correction (2026-05-30):
   a plan GO and a separate execution GO.
 - Do not run H1 minimal through `scripts/smoke_test_explain.py` without a
   broader explicit GO; it runs more than one case and writes report artifacts.
+- Do not treat H1 RA-03 PASS as permission for more `/explain` cases, Phase 2
+  heavy run, matrix execution, EMR writes, cleanup, or downloads.
 - Do not commit or push unless explicitly requested.

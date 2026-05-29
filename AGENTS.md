@@ -120,6 +120,25 @@ This shim status does not authorize L5 or `/explain`. The next repo-side gate is
 `H1 minimal /explain smoke plan GO`; H1 execution itself requires a separate
 explicit execution GO after the plan is accepted.
 
+R8 H1 plan correction (2026-05-30):
+
+- Current repo/doc baseline at R8 entry is `3000ceb`
+  (`docs(rag): sync shim step3 review status`). Do not use `21c6379` as the
+  current repo HEAD; `21c6379` is the shim implementation commit only.
+- Preferred H1 topology is split execution: HP Z2 runs `llama-server` and the
+  loopback shim; the reviewed EMR `/explain` harness reaches the shim through
+  `127.0.0.1:18081` via SSH tunnel. All-on-HP is acceptable only after the HP
+  EMR checkout is refreshed and pinned.
+- Main PC verified `EMR_AI_24clinic` commits `218bf51f` and current
+  `543e1f9`; HP reported `ef6e40f` and could not resolve `218bf51f`.
+  Diff inspection showed no `/explain`-relevant path changes under `app`,
+  `scripts`, or `rag_index` from `ef6e40f` to `543e1f9`, but this is still an
+  audit drift. Refresh HP `EMR_AI_24clinic` before H1 execution unless the user
+  explicitly accepts the older baseline.
+- H1 minimal execution, if later approved, is RA-03 only, uses env override
+  only, must not use `scripts/smoke_test_explain.py`, and must include JSON
+  validity, citation verifier, PHI-zero, repo-dirty, and teardown checks.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.
@@ -131,4 +150,6 @@ explicit execution GO after the plan is accepted.
 - Do not treat shim health preflight as permission to call `/explain`.
 - Do not treat shim review PASS as permission to call `/explain`; H1 still needs
   a plan GO and a separate execution GO.
+- Do not run H1 minimal through `scripts/smoke_test_explain.py` without a
+  broader explicit GO; it runs more than one case and writes report artifacts.
 - Do not commit or push unless explicitly requested.

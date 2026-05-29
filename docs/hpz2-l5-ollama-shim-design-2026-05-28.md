@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed
+status: implemented-step3-reviewed-h1-plan-r8
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -208,6 +208,76 @@ Shim은 다음 값을 로그에 남기지 않는다.
 9. shim `/health`에서 `upstream.status=ok`.
 10. EMR env가 `http://127.0.0.1:18081`을 가리킴.
 11. RA-03 값이 `sme + trimesy + lacto2`, `dx=a090`, `age=1` 그대로임.
+
+## H1 Minimal Smoke Plan R8
+
+R8 overrides the older preflight pin above where it still names `218bf51f` as
+the only EMR baseline. This section is still plan-only; it does not authorize
+`/explain`.
+
+### Audit pins
+
+- `local-llm-eval` repo/doc baseline at R8 entry:
+  `3000ceb` (`docs(rag): sync shim step3 review status`)
+- Shim implementation commit:
+  `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
+- Main PC EMR reviewed commits:
+  `218bf51f0af66907333aa9c619ac2a0f732eb6d1` and latest observed
+  `543e1f9ef5a0e4fcb49c47e4a55b0e5e661a6944`
+- HP EMR drift observed:
+  `ef6e40f...`; `218bf51f` was not a valid object on HP before refresh.
+- Main PC diff check:
+  `ef6e40f..543e1f9` had no changes under `app`, `scripts`, or `rag_index`.
+  This makes the older HP baseline functionally low risk for `/explain`, but it
+  is still not audit-clean. Refresh HP EMR before execution.
+
+### Preferred topology
+
+Default H1 topology is split execution:
+
+```text
+Main PC EMR harness
+  -> 127.0.0.1:18081 through SSH tunnel
+  -> HP Z2 loopback shim
+  -> HP Z2 loopback llama-server
+```
+
+All-on-HP may be used only after HP has refreshed both relevant repos and
+reported clean HEADs. In either topology, the shim remains loopback-only.
+
+### Harness boundary
+
+Do not use `scripts/smoke_test_explain.py` for H1 minimal smoke. It runs the
+broader smoke set and writes markdown artifacts. H1 minimal uses one in-memory
+`TestClient` or equivalent direct harness call for RA-03 only, with process env
+override only:
+
+```powershell
+$env:EMR_LLM_ENABLED='true'
+$env:EMR_LLM_PROVIDER='ollama'
+$env:EMR_LLM_MODEL='hpz2-l2-qwen36-35b-a3b'
+$env:EMR_LLM_HOST='http://127.0.0.1:18081'
+$env:EMR_LLM_TIMEOUT_SECONDS='300'
+```
+
+### Pass criteria
+
+- one RA-03 `/explain` request only
+- HTTP 200 and EMR status `ok`
+- response text parses as JSON with `summary` and `citations`
+- citation verifier passes against retrieved chunks
+- shim log shows model-name mapping resolved, no 404
+- PHI scan hit count is zero
+- `local-llm-eval` and `EMR_AI_24clinic` remain clean
+- shim and llama-server are shut down; ports `18080` and `18081` have no
+  listeners after teardown
+
+### Fail / STOP
+
+Stop after first failure and report only PHI-safe metadata if any of these
+happen: `context_insufficient`, `citation_failed`, model not found, timeout,
+unavailable, invalid JSON, PHI hit, dirty repo, health failure, model file
+missing, or unexpected runtime argument drift.
 
 ## STOP 조건
 

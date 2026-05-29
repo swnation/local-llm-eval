@@ -58,13 +58,13 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS |
-| Current repo HEAD | `21c6379` (`feat(rag): add HP Z2 ollama llama.cpp shim`) |
-| Current tracker status | live R7 doc-sync before commit; repo has only the three doc-sync files dirty |
-| Next recommended GO | `H1 minimal /explain smoke plan GO`, or commit/push this doc-sync before H1 |
+| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 plan R8 documented |
+| Current repo HEAD | `3000ceb` (`docs(rag): sync shim step3 review status`) at R8 entry; after R8 commit/push use latest `origin/main` |
+| Current tracker status | live R8 H1 plan doc-sync: audit pins corrected, HP EMR drift captured, H1 harness narrowed |
+| Next recommended GO | `HP EMR baseline refresh GO`, then HP pull latest `local-llm-eval`, then decide `H1 minimal /explain smoke execution GO (RA-03 only)` |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
-| L5 hard blocker | H1 plan/result + RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` |
+| L5 hard blocker | H1 execution result + RA-03 user-owned final checks + explicit `Phase 2 heavy run GO` for broader L5 cells |
 | Disk hard floor | `C:` free space >= 100 GB |
 | Runtime lane | llama.cpp primary / LM Studio secondary; L5 shim provides local Ollama-compatible adapter only |
 
@@ -77,7 +77,7 @@ Rules:
 | L2 semantic smoke | complete-shortlist-locked | 2026-05-26/27 | LM Studio L2 completed as secondary; llama.cpp full matrix and bonus probes completed; shortlist locked | `C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md` | accepted-for-shortlist-codify | repo review + commit/push; then L3 or L5 planning decision |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
-| L5 shim adapter | implemented-reviewed | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS / CONDITIONAL GO for H1 | H1 plan next; no `/explain` without separate GO |
+| L5 shim adapter | implemented-reviewed | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS / CONDITIONAL GO for H1 | H1 plan R8 documented; HP repo refresh next; no `/explain` without separate GO |
 | L5 real endpoint | blocked-hard | - | - | - | - | requires H1 plan/result, RA-03 checks, sufficient L2-L4 evidence, and `Phase 2 heavy run GO` |
 
 ## 3. Parallel Track Status
@@ -113,6 +113,9 @@ Rules:
 | `HP Z2 L4 native contract check GO` | Strict JSON/schema convenience check | L4 result packet | native contract does not override semantic gate |
 | `HP Z2 shim Step 3 loopback health preflight GO` | Verify HP repo state, ensure no stale server process, start one loopback llama.cpp server, start loopback shim, and check shim `/health` | Step 3 health preflight packet | no `/explain`, no EMR write, no settings file write, no model matrix, no cleanup/download |
 | `H1 minimal /explain smoke plan GO` | Plan a one-case H1 smoke with preflight, env override, JSON validity check, logging/PHI guard, and shutdown boundary | H1 plan packet | plan only; no `/explain`, no EMR write, no settings file write, no model matrix |
+| `HP EMR baseline refresh GO` | Refresh HP `C:\Github\EMR_AI_24clinic` to known origin state and report clean HEAD | HP EMR baseline packet | no `/explain`, no llama-server, no shim, no file edits, no commit/push |
+| `HP local-llm-eval R8 pull/verify GO` | Pull latest `local-llm-eval` docs after R8 commit/push and report clean HEAD | HP local-llm-eval sync packet | no model execution, no `/explain`, no EMR write |
+| `H1 minimal /explain smoke execution GO (RA-03 only)` | Execute exactly one RA-03 `/explain` smoke through the reviewed H1 harness and then teardown | H1 one-case result packet | no second case, no `scripts/smoke_test_explain.py`, no settings file write, no EMR repo write, stop after first failure |
 | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells | Phase 2 result packet | requires separate explicit GO, RA-03 checks, and EMR read-only constraints |
 | `Phase 2 ladder tracker commit + push GO` | Commit tracker changes | git commit/push | docs only unless explicitly broadened |
 
@@ -233,6 +236,36 @@ Append new result entries below. Keep old entries intact.
 - Reviewer verdict: -
 - Next GO: pending
 
+### H1 minimal `/explain` smoke plan
+
+- Status: planned; execution blocked by HP repo baseline refresh
+- Plan GO interpreted as: plan only, no `/explain`
+- Reported HP read-only state before R8:
+  - HP hostname: `hpcheck`
+  - HP `local-llm-eval`: clean, `21c6379...`
+  - HP `EMR_AI_24clinic`: clean, `ef6e40f...`
+  - ports `127.0.0.1:18080` and `127.0.0.1:18081`: free
+  - `218bf51f` was not resolvable on HP
+- Main PC verification:
+  - `EMR_AI_24clinic` has `218bf51f0af66907333aa9c619ac2a0f732eb6d1`
+    and latest observed `543e1f9ef5a0e4fcb49c47e4a55b0e5e661a6944`.
+  - `ef6e40f..543e1f9` has no changes under `app`, `scripts`, or
+    `rag_index`.
+  - Verdict: functionally low risk for `/explain`, but audit drift remains.
+    Refresh HP EMR before H1 execution.
+- R8 plan decisions:
+  - Preferred topology: split execution through SSH tunnel. HP runs
+    `llama-server` and shim; reviewed EMR harness calls `127.0.0.1:18081`.
+  - All-on-HP is allowed only after HP refreshes repos and reports clean HEADs.
+  - `scripts/smoke_test_explain.py` is not allowed for H1 minimal because it
+    runs more than one case and writes markdown artifacts.
+  - Use one in-memory `TestClient` or equivalent direct harness call for RA-03
+    only, with env override and no `data/llm_settings.json` write.
+- Required before execution:
+  - HP EMR baseline refresh and clean HEAD report.
+  - HP `local-llm-eval` pull after R8 commit/push and clean HEAD report.
+  - explicit `H1 minimal /explain smoke execution GO (RA-03 only)`.
+
 ### L5 Ollama-compatible shim adapter
 
 - Status: implemented-reviewed
@@ -261,7 +294,7 @@ Append new result entries below. Keep old entries intact.
   - EMR `ollama_client.py` sends `/api/generate` and reads only `response`; shim contract matches.
   - H1 must confirm valid JSON and model-name mapping.
   - H2+ quality comparisons must revisit schema fidelity because the shim maps strict EMR `format` to llama.cpp `json_object` only.
-- Next GO: `H1 minimal /explain smoke plan GO`
+- Next GO: `HP EMR baseline refresh GO`, then HP `local-llm-eval` R8 pull/verify
 
 ## 6. STOP Carry
 
@@ -271,6 +304,8 @@ Append new result entries below. Keep old entries intact.
 - No H1 `/explain` smoke from shim health success alone.
 - No H1 `/explain` smoke from shim review PASS alone; H1 needs a plan GO and a
   separate execution GO.
+- No H1 minimal smoke through `scripts/smoke_test_explain.py` without broader
+  explicit GO; H1 is one RA-03 request only.
 - No EMR_AI_24clinic write without explicit GO.
 - No RA-03 changes or inferred replacement values without explicit user instruction.
 - No Stage B/C expansion without explicit GO.
@@ -295,3 +330,4 @@ Append new result entries below. Keep old entries intact.
 | R5 | 2026-05-27 | Codified overnight llama.cpp L2 full matrix, Granite bonus probe, current primary shortlist, reference set, and current primary exclusions. |
 | R6 | 2026-05-30 | Synced tracker to shim implementation commit `21c6379`, marked shortlist codification complete-committed, added L5 shim adapter status, and set next narrow runtime gate to `HP Z2 shim Step 3 loopback health preflight GO`. |
 | R7 | 2026-05-30 | Synced tracker after HP Step 3 health preflight/shutdown and Claude shim review PASS. Next gate is H1 minimal `/explain` smoke planning, not execution. |
+| R8 | 2026-05-30 | Corrected H1 audit pins, separated current repo/doc baseline from shim implementation commit, recorded HP EMR baseline drift, narrowed H1 to one RA-03 harness call, and added HP repo refresh gates before execution. |

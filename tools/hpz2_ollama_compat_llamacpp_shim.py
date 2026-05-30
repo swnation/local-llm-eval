@@ -168,9 +168,33 @@ def build_chat_completion_payload(ollama_payload: dict[str, Any], config: ShimCo
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
     }
-    if config.schema_mode == "json_object":
-        chat_payload["response_format"] = {"type": "json_object"}
+    response_format = build_response_format(ollama_payload, config)
+    if response_format is not None:
+        chat_payload["response_format"] = response_format
     return chat_payload, request_model, mapped_model
+
+
+def build_response_format(ollama_payload: dict[str, Any], config: ShimConfig) -> dict[str, Any] | None:
+    if config.schema_mode == "none":
+        return None
+    if config.schema_mode == "json_object":
+        return {"type": "json_object"}
+    if config.schema_mode == "json_schema":
+        schema = ollama_payload.get("format")
+        if not isinstance(schema, dict) or not schema:
+            raise ClientRequestError(
+                HTTPStatus.BAD_REQUEST,
+                "format schema must be a JSON object when schema-mode=json-schema",
+            )
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "explain_response",
+                "strict": True,
+                "schema": schema,
+            },
+        }
+    raise ClientRequestError(HTTPStatus.BAD_REQUEST, "unsupported schema mode")
 
 
 def _read_response_body(response: object) -> bytes:
@@ -402,7 +426,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--model-map", action="append", default=[], help="Alias mapping in alias=target form")
     parser.add_argument("--max-tokens", type=int, default=8192)
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--schema-mode", choices=["json-object", "none"], default="json-object")
+    parser.add_argument("--schema-mode", choices=["json-object", "json-schema", "none"], default="json-object")
     parser.add_argument("--max-request-bytes", type=int, default=4 * 1024 * 1024)
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     return parser.parse_args(argv)
@@ -420,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         max_tokens=args.max_tokens,
         temperature=args.temperature,
         max_request_bytes=args.max_request_bytes,
-        schema_mode="json_object" if args.schema_mode == "json-object" else "none",
+        schema_mode=args.schema_mode.replace("-", "_"),
     )
     serve(config, listen_host=args.listen_host, listen_port=args.listen_port)
     return 0

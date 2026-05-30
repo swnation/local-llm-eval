@@ -89,12 +89,13 @@ def make_fake_llama_server(status=HTTPStatus.OK, payload=None):
     return ThreadingHTTPServer(("127.0.0.1", 0), FakeLlamaHandler)
 
 
-def make_shim_server(upstream_base_url, *, model_map=None):
+def make_shim_server(upstream_base_url, *, model_map=None, schema_mode="json_object"):
     config = shim.ShimConfig(
         upstream_base_url=shim.normalize_upstream_base_url(upstream_base_url),
         model_map=model_map or {},
         request_timeout_seconds=5,
         health_timeout_seconds=2,
+        schema_mode=schema_mode,
     )
     return shim.ShimHTTPServer(("127.0.0.1", 0), config)
 
@@ -154,6 +155,89 @@ class Hpz2OllamaCompatShimTest(unittest.TestCase):
         )
         self.assertFalse(upstream["payload"]["stream"])
         self.assertEqual(upstream["payload"]["response_format"], {"type": "json_object"})
+
+    def test_json_schema_mode_forwards_emr_format_schema(self):
+        explain_schema = {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "citations": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["summary", "citations"],
+            "additionalProperties": False,
+        }
+        with ServerThread(make_fake_llama_server()) as llama_server:
+            with ServerThread(
+                make_shim_server(
+                    llama_server.url + "/v1",
+                    schema_mode="json_schema",
+                )
+            ) as shim_server:
+                status, body = post_json(
+                    shim_server.url + "/api/generate",
+                    {
+                        "model": "hpz2-l2-qwen36-35b-a3b",
+                        "system": "SYSTEM_TEXT",
+                        "prompt": "PROMPT_TEXT",
+                        "stream": False,
+                        "format": explain_schema,
+                    },
+                )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["response"], '{"summary":"ok","citations":["[rule:drug:sme]"]}')
+        self.assertEqual(len(FakeLlamaHandler.requests), 1)
+        upstream = FakeLlamaHandler.requests[0]
+        self.assertEqual(
+            upstream["payload"]["response_format"],
+            {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "explain_response",
+                    "strict": True,
+                    "schema": explain_schema,
+                },
+            },
+        )
+
+    def test_json_schema_mode_requires_format_schema_without_upstream_call(self):
+        with ServerThread(make_fake_llama_server()) as llama_server:
+            with ServerThread(
+                make_shim_server(
+                    llama_server.url + "/v1",
+                    schema_mode="json_schema",
+                )
+            ) as shim_server:
+                request = urllib.request.Request(
+                    shim_server.url + "/api/generate",
+                    data=_json_bytes({"model": "m", "prompt": "p", "stream": False}),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(request, timeout=5)
+                body = caught.exception.read().decode("utf-8")
+
+        self.assertEqual(caught.exception.code, 400)
+        self.assertIn("format schema must be a JSON object", body)
+        self.assertEqual(FakeLlamaHandler.requests, [])
+
+    def test_none_schema_mode_omits_response_format(self):
+        with ServerThread(make_fake_llama_server()) as llama_server:
+            with ServerThread(
+                make_shim_server(llama_server.url + "/v1", schema_mode="none")
+            ) as shim_server:
+                status, _body = post_json(
+                    shim_server.url + "/api/generate",
+                    {
+                        "model": "hpz2-l2-qwen36-35b-a3b",
+                        "prompt": "PROMPT_TEXT",
+                        "stream": False,
+                    },
+                )
+
+        self.assertEqual(status, 200)
+        self.assertNotIn("response_format", FakeLlamaHandler.requests[0]["payload"])
 
     def test_streaming_request_fails_closed_without_upstream_call(self):
         with ServerThread(make_fake_llama_server()) as llama_server:

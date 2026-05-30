@@ -191,6 +191,25 @@ R11 schema fidelity capability probe sync (2026-05-30):
 - Next recommended gate: `shim json_schema mode implementation GO` before H2+
   quality conclusions.
 
+R12 shim json_schema mode implementation (2026-05-30):
+
+- Working tree implementation adds `--schema-mode json-schema`.
+- In `json-schema` mode, the shim wraps the Ollama/EMR `format` object in the
+  R11-verified nested OpenAI-style shape:
+  `response_format: {"type":"json_schema","json_schema":{"name":"explain_response","strict":true,"schema":...}}`.
+- Default remains `--schema-mode json-object` for backward compatibility.
+- `json-schema` mode fails closed with HTTP 400 if the request has no JSON
+  object `format` schema, and does not call upstream in that case.
+- Validation passed in working tree:
+  `python -m unittest tests.test_hpz2_ollama_compat_llamacpp_shim` ran 9 tests
+  successfully.
+- Shape review found the first flat working-tree draft did not match the R11 HP
+  probe artifact; the implementation was corrected to the nested shape before
+  commit/push.
+- This implementation still does not authorize `/explain`, model execution,
+  matrix runs, EMR writes, cleanup, download, commit, or push without separate
+  GO.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.

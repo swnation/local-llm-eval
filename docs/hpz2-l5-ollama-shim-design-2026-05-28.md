@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed-h1-pass-shutdown-schema-probe-r11
+status: implemented-step3-reviewed-h1-pass-shutdown-schema-probe-jsonschema-r12
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -86,6 +86,31 @@ Shim이 llama.cpp로 보내는 요청:
 }
 ```
 
+Default `--schema-mode json-object` keeps the original H1 behavior. R12 also
+adds `--schema-mode json-schema` for H2+ schema-fidelity work. In that mode,
+the shim wraps EMR/Ollama `format` in the nested OpenAI-style shape verified by
+the R11 HP probe:
+
+```json
+{
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "explain_response",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "required": ["summary", "citations"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+If `--schema-mode json-schema` is used and the request has no JSON object
+`format`, the shim returns HTTP 400 before calling upstream.
+
 Shim이 EMR로 돌려주는 응답:
 
 ```json
@@ -125,8 +150,12 @@ python tools\hpz2_ollama_compat_llamacpp_shim.py `
   --listen-port 18081 `
   --upstream http://127.0.0.1:18080/v1 `
   --timeout-seconds 300 `
-  --default-model hpz2-l2-qwen36-35b-a3b
+  --default-model hpz2-l2-qwen36-35b-a3b `
+  --schema-mode json-schema
 ```
+
+For legacy/H1 parity behavior, omit `--schema-mode` or use
+`--schema-mode json-object`.
 
 EMR은 나중에 별도 GO 후 env override만 사용한다. 설정 파일을 쓰지 않는
 방식이 우선이다.
@@ -400,12 +429,37 @@ Limitations:
 - H2+ quality conclusions should still use one fixed structured-output mode and
   document that mode.
 
-Next implementation gate:
+## Shim json_schema Mode Implementation R12
 
-- Add a shim mode that forwards EMR strict `format` schema to llama.cpp
-  OpenAI-style `json_schema`, guarded by tests and docs.
-- Do not enter that implementation without explicit
-  `shim json_schema mode implementation GO`.
+Status: implemented in working tree under explicit
+`shim json_schema mode implementation GO`.
+
+Behavior:
+
+- CLI now accepts `--schema-mode json-schema`.
+- Default remains `--schema-mode json-object` for backward compatibility.
+- In `json-schema` mode, the shim wraps the incoming EMR/Ollama `format` object
+  as the R11-verified nested OpenAI-style shape:
+  `response_format: {"type":"json_schema","json_schema":{"name":"explain_response","strict":true,"schema":...}}`.
+- If `json-schema` mode receives a missing, empty, or non-object `format`, the
+  shim returns HTTP 400 and does not call upstream.
+- `--schema-mode none` still omits `response_format`.
+
+Validation:
+
+- `python -m py_compile tools\hpz2_ollama_compat_llamacpp_shim.py tests\test_hpz2_ollama_compat_llamacpp_shim.py`
+  passed.
+- `python -m unittest tests.test_hpz2_ollama_compat_llamacpp_shim` passed:
+  9 tests.
+- Shape comparison against HP R11 artifacts found the first flat working-tree
+  draft mismatched the probe. The implementation was corrected to the nested
+  shape before commit/push.
+
+Boundary:
+
+- No `/explain`, no shim `/api/generate` against HP runtime, no llama-server
+  startup, no EMR write, no model matrix, no cleanup/download, and no
+  commit/push are authorized by this implementation alone.
 
 ## STOP 조건
 
@@ -475,9 +529,9 @@ H1에서 확인할 carry:
 
 - 응답이 valid JSON인지 확인한다.
 - EMR 모델명과 llama.cpp served model/model-map 정합을 확인한다.
-- H2+ 품질 비교 전에는 schema fidelity를 재검토한다. 현재 shim은 EMR의 strict
-  `format` schema를 그대로 전달하지 않고 llama.cpp `response_format:
-  {"type":"json_object"}`만 보낸다.
+- H2+ 품질 비교 전에는 구조화 출력 모드를 하나로 고정한다. R12 이후
+  `--schema-mode json-schema`를 사용할 수 있지만, HP pull/verify와 별도 실행
+  GO 전에는 새 모드로 `/explain`을 호출하지 않는다.
 
 R9 addendum: H1 RA-03 tunneled smoke has passed as a one-case
 endpoint-readiness check. This does not authorize L5 heavy run, additional
@@ -487,6 +541,12 @@ confirmed the H1 runtime shutdown; HP still needs to pull/verify repo doc R9
 
 R11 addendum: HP schema fidelity capability probe confirmed llama.cpp `b9333`
 accepts both `json_object` and OpenAI-style `json_schema` response formats in a
-minimal synthetic direct `/v1/chat/completions` probe. The next repo gate is
-`shim json_schema mode implementation GO`; this is not H2 or heavy-run
-authorization.
+minimal synthetic direct `/v1/chat/completions` probe. This is not H2 or
+heavy-run authorization.
+
+R12 addendum: `--schema-mode json-schema` is implemented with fail-closed schema
+validation and unit coverage. The first flat draft was corrected after HP shape
+comparison showed R11 used the nested OpenAI-style wrapper with `name`,
+`strict`, and `schema`. Default behavior remains `json-object`. This does not
+authorize HP execution, `/explain`, matrix work, EMR writes, commit, or push
+without separate GO.

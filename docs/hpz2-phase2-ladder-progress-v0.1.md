@@ -58,13 +58,13 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 RA-03 smoke PASS / H1 runtime shutdown confirmed / schema fidelity capability probe PASS |
-| Current repo HEAD | `66733a8` (`docs(rag): record H1 runtime shutdown`) at R11 entry; after R11 commit/push use latest `origin/main` |
-| Current tracker status | live R11 schema probe doc-sync: llama.cpp b9333 accepted json_object and OpenAI-style json_schema in minimal direct probe; broader L5 still blocked |
-| Next recommended GO | `shim json_schema mode implementation GO`; then small A/B or H2/H3 planning after implementation review |
+| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 RA-03 smoke PASS / H1 runtime shutdown confirmed / schema fidelity capability probe PASS / shim json_schema mode implemented+tested in working tree |
+| Current repo HEAD | `0588f4d` (`docs(rag): record schema fidelity probe`) at R12 implementation entry; R12 changes are working tree until separate commit/push GO |
+| Current tracker status | live R12 shim implementation: `--schema-mode json-schema` wraps EMR `format` in the R11-verified nested OpenAI-style `json_schema` shape; 9 shim unit tests passed; broader L5 still blocked |
+| Next recommended GO | `shim json_schema mode review GO`; after review, commit/push + HP pull/verify, then small A/B or H2/H3 planning |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
-| L5 hard blocker | H1 PASS + shutdown + schema capability probe do not authorize broader L5; remaining blockers are shim json_schema mode implementation/review, RA-03 user-owned final checks, and explicit `Phase 2 heavy run GO` |
+| L5 hard blocker | H1 PASS + shutdown + schema capability probe + R12 implementation do not authorize broader L5; remaining blockers are review, commit/push, HP pull/verify, RA-03 user-owned final checks, and explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
 | Runtime lane | llama.cpp primary / LM Studio secondary; L5 shim provides local Ollama-compatible adapter only |
 
@@ -77,8 +77,8 @@ Rules:
 | L2 semantic smoke | complete-shortlist-locked | 2026-05-26/27 | LM Studio L2 completed as secondary; llama.cpp full matrix and bonus probes completed; shortlist locked | `C:\Github\hpz2-run-artifacts\results\hpz2_llamacpp_l2_integrated_report_20260527.md` | accepted-for-shortlist-codify | repo review + commit/push; then L3 or L5 planning decision |
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
-| L5 shim adapter | implemented-reviewed-h1-pass-schema-probe-pass | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS for H1 plumbing; schema probe PASS | implement json_schema forwarding mode before H2+ quality conclusions |
-| L5 real endpoint | h1-smoke-pass-shutdown-schema-probe-broader-blocked | 2026-05-30 | 2026-05-30 | PHI-safe H1 metadata packet; no raw response text recorded; shutdown packet; schema probe packet | one-case PASS + runtime stopped + capability probe PASS | no additional cases/matrix without separate GO; broader L5 requires shim schema mode/review, RA-03 checks, and `Phase 2 heavy run GO` |
+| L5 shim adapter | implemented-reviewed-h1-pass-schema-probe-jsonschema-working-tree | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` / R12 working tree | PASS for H1 plumbing; schema probe PASS; R12 unit tests PASS | review/commit/push before HP use |
+| L5 real endpoint | h1-smoke-pass-shutdown-schema-probe-jsonschema-working-tree-broader-blocked | 2026-05-30 | 2026-05-30 | PHI-safe H1 metadata packet; no raw response text recorded; shutdown packet; schema probe packet; R12 repo diff | one-case PASS + runtime stopped + capability probe PASS + R12 unit tests PASS | no additional cases/matrix without separate GO; broader L5 requires review/commit/push/HP pull, RA-03 checks, and `Phase 2 heavy run GO` |
 
 ## 3. Parallel Track Status
 
@@ -361,11 +361,46 @@ Append new result entries below. Keep old entries intact.
     schema as llama.cpp OpenAI-style `json_schema`.
   - It does not prove behavior across longer clinical prompts or H2+ model
     comparisons.
-- Next GO: `shim json_schema mode implementation GO`.
+- Next GO: implementation is in working tree; review/commit/push remains separate.
+
+### Shim json_schema mode implementation
+
+- Status: implemented and unit-tested in working tree; not committed or pushed
+  under this GO.
+- GO issued: `shim json_schema mode implementation GO`
+- Reported: 2026-05-30
+- Files changed:
+  - `tools/hpz2_ollama_compat_llamacpp_shim.py`
+  - `tests/test_hpz2_ollama_compat_llamacpp_shim.py`
+  - `docs/hpz2-l5-ollama-shim-design-2026-05-28.md`
+  - `docs/hpz2-phase2-ladder-progress-v0.1.md`
+  - `AGENTS.md`
+- Behavior:
+  - CLI now accepts `--schema-mode json-schema`.
+  - Default remains `--schema-mode json-object`.
+  - In `json-schema` mode, incoming EMR/Ollama `format` is wrapped as the
+    R11-verified nested OpenAI-style shape:
+    `response_format: {"type":"json_schema","json_schema":{"name":"explain_response","strict":true,"schema":...}}`.
+  - Missing, empty, or non-object `format` in `json-schema` mode returns HTTP
+    400 before upstream.
+  - `--schema-mode none` omits `response_format`.
+- Validation:
+  - `python -m py_compile tools\hpz2_ollama_compat_llamacpp_shim.py tests\test_hpz2_ollama_compat_llamacpp_shim.py`
+    passed.
+  - `python -m unittest tests.test_hpz2_ollama_compat_llamacpp_shim` passed:
+    9 tests.
+  - HP artifact shape comparison found the first flat working-tree draft did
+    not match R11; R12 was corrected to the nested wrapper before commit/push.
+- Boundary:
+  - No `/explain`, no HP runtime start, no shim call against HP runtime, no
+    model matrix, no EMR write, no cleanup/download, no commit, and no push were
+    performed.
+- Next GO: `shim json_schema mode review GO`, then commit/push and HP
+  pull/verify before any HP use of the new mode.
 
 ### L5 Ollama-compatible shim adapter
 
-- Status: implemented-reviewed
+- Status: implemented-reviewed-r12-jsonschema-working-tree
 - GO issued: shim implementation gate
 - Reported: 2026-05-28; Step 3/review updated 2026-05-30
 - Commit: `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
@@ -390,13 +425,14 @@ Append new result entries below. Keep old entries intact.
 - Review carry:
   - EMR `ollama_client.py` sends `/api/generate` and reads only `response`; shim contract matches.
   - H1 confirmed valid JSON and model-name mapping for one RA-03 request.
-  - H2+ quality comparisons must revisit schema fidelity because the shim maps strict EMR `format` to llama.cpp `json_object` only.
+  - R12 adds an optional `json_schema` forwarding mode, but default remains
+    `json_object`; H2+ must still use one fixed documented mode.
 - H1 result: one-case tunneled RA-03 `/explain` PASS recorded in R9.
 - H1 runtime shutdown: confirmed in R10.
 - Schema fidelity capability probe: PASS in R11 for minimal direct
   `json_object` and `json_schema` support.
-- Next GO: `shim json_schema mode implementation GO`, then small A/B or H2/H3
-  planning after implementation review.
+- Next GO: `shim json_schema mode review GO`, then commit/push and HP
+  pull/verify before small A/B or H2/H3 planning.
 
 ## 6. STOP Carry
 
@@ -410,8 +446,9 @@ Append new result entries below. Keep old entries intact.
   explicit GO; H1 is one RA-03 request only.
 - No additional `/explain` cases, Phase 2 heavy run, matrix execution, EMR
   writes, cleanup, or downloads from H1 RA-03 PASS alone.
-- No H2+ quality conclusion from schema capability probe alone; implement/review
-  one fixed structured-output mode first.
+- No H2+ quality conclusion from schema capability probe or R12 implementation
+  alone; review/commit/push, HP pull/verify, and one fixed structured-output
+  mode are required first.
 - No EMR_AI_24clinic write without explicit GO.
 - No RA-03 changes or inferred replacement values without explicit user instruction.
 - No Stage B/C expansion without explicit GO.
@@ -440,3 +477,5 @@ Append new result entries below. Keep old entries intact.
 | R9 | 2026-05-30 | Recorded tunneled H1 RA-03 one-case `/explain` PASS: HTTP 200, EMR `ok`, valid JSON, citation verifier pass, PHI hits `0`, one request only, repos clean, and broader L5 still blocked without separate GO. |
 | R10 | 2026-05-30 | Recorded HP H1 runtime shutdown: shim PID `24380` and `llama-server` PID `55796` stopped, ports `18080`/`18081` no listener, HP repos clean, and HP `local-llm-eval` still needs R9 pull before next doc-dependent work. |
 | R11 | 2026-05-30 | Recorded schema fidelity capability probe: llama.cpp `b9333` accepted both `json_object` and OpenAI-style `json_schema` response formats in a minimal direct synthetic probe; next gate is shim `json_schema` forwarding implementation, not H2/heavy run. |
+| R12 | 2026-05-30 | Implemented optional shim `--schema-mode json-schema` forwarding mode in working tree, added fail-closed validation and unit coverage, and kept default `json-object`; review/commit/push remain separate. |
+| R12-correction | 2026-05-30 | Corrected the initial flat `json_schema` draft to the R11-verified nested OpenAI-style wrapper after HP shape comparison reported MISMATCH. |

@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed-h1-pass-shutdown-schema-probe-jsonschema-r12
+status: implemented-step3-reviewed-h1-pass-shutdown-schema-probe-jsonschema-r13-plan-freeze
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -366,9 +366,9 @@ Carry:
   verification, and PHI-zero metadata for one RA-03 request.
 - H1 does not prove model quality or authorize additional cases, a matrix,
   cleanup/download, EMR writes, or `Phase 2 heavy run GO`.
-- H2+ quality conclusions still require a schema-fidelity decision. The shim
-  currently sends llama.cpp `response_format: {"type":"json_object"}` rather
-  than forwarding the strict EMR `format` schema.
+- H2+ quality conclusions still require one fixed structured-output mode. R12
+  added committed `json_schema` forwarding support, but the H2 mode must be
+  selected through a limited A/B rather than inferred from this one-case H1 run.
 - R9 note: runtime shutdown still required a separate HP report at the time of
   the H1 result sync.
 
@@ -431,8 +431,9 @@ Limitations:
 
 ## Shim json_schema Mode Implementation R12
 
-Status: implemented in working tree under explicit
-`shim json_schema mode implementation GO`.
+Status: implemented, reviewed, committed, pushed, and HP-pulled under explicit
+`shim json_schema mode implementation GO` plus later commit/push and HP
+pull/verify gates.
 
 Behavior:
 
@@ -454,6 +455,8 @@ Validation:
 - Shape comparison against HP R11 artifacts found the first flat working-tree
   draft mismatched the probe. The implementation was corrected to the nested
   shape before commit/push.
+- Commit/push completed at `dd646db596aa4a44b3272223973961181d5a4dbc`.
+- HP pull/verify completed clean after `66733a8..dd646db` fast-forward.
 
 Boundary:
 
@@ -550,3 +553,10 @@ comparison showed R11 used the nested OpenAI-style wrapper with `name`,
 `strict`, and `schema`. Default behavior remains `json-object`. This does not
 authorize HP execution, `/explain`, matrix work, EMR writes, commit, or push
 without separate GO.
+
+R13 addendum: H2 schema-mode A/B execution plan is frozen in
+`docs/h2-schema-mode-ab-plan-2026-05-30.md`. Minimal scope is RA-03 plus RA-05
+crossed with `json_object` and `json_schema` on `hpz2-l2-qwen36-35b-a3b`.
+RA-05 is structure/schema-enforcement evidence only, not final content-quality
+verdict. Granite expansion to 8 cells requires separate approval. This plan is
+not execution authorization.

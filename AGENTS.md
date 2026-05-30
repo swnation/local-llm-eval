@@ -111,13 +111,15 @@ main PC at `21c6379e0fbb8c54d6932de0ee22a1b7a86277c8`
   (`llama-server` and shim stopped; ports `18080` and `18081` not listening).
 - Shim review: PASS / CONDITIONAL GO for H1. EMR sends Ollama
   `POST /api/generate` and reads only the `response` field; the shim contract
-  matches. Carry notes: H1 must confirm valid JSON and model-name mapping; H2+
-  quality comparisons must revisit schema fidelity because the shim currently
-  sends llama.cpp `response_format: {"type":"json_object"}` rather than the
-  stricter EMR `format` schema.
+  matches. H1 later confirmed valid JSON and model-name mapping for one RA-03
+  request. R12 adds committed `--schema-mode json-schema` support that forwards
+  the EMR `format` schema to llama.cpp in the R11-verified nested OpenAI-style
+  wrapper. H2+ quality comparisons still require one fixed documented schema
+  mode before comparing models.
 
-This shim status by itself does not authorize L5 or `/explain`; H1 execution
-requires a separate explicit execution GO after the plan is accepted.
+This shim status by itself does not authorize broader L5, additional
+`/explain` calls, or H2/H3/H4 work; each later execution gate requires a
+separate explicit GO.
 
 R8 H1 plan correction (2026-05-30):
 
@@ -157,9 +159,9 @@ R9 H1 RA-03 result sync (2026-05-30):
   successful path used `test@192.168.68.50`.
 - Carry: this H1 PASS is a plumbing/readiness signal only. It does not authorize
   Phase 2 heavy run, additional cases, matrix execution, EMR writes, cleanup,
-  downloads, or H2+ quality conclusions. H2+ quality comparisons must revisit
-  schema fidelity because the shim still maps EMR strict `format` schema to
-  llama.cpp `json_object`.
+  downloads, or H2+ quality conclusions. R12 adds a `json_schema` forwarding
+  mode, but H2+ quality comparisons must still select one fixed schema mode
+  through a reviewed A/B gate.
 - Runtime carry at R9 entry: shutdown was still awaiting separate HP report.
 
 R10 H1 runtime shutdown sync (2026-05-30):
@@ -193,22 +195,49 @@ R11 schema fidelity capability probe sync (2026-05-30):
 
 R12 shim json_schema mode implementation (2026-05-30):
 
-- Working tree implementation adds `--schema-mode json-schema`.
+- Committed implementation `dd646db596aa4a44b3272223973961181d5a4dbc`
+  (`feat(rag): add shim json_schema response mode`) adds
+  `--schema-mode json-schema`; it was pushed to `origin/main` and pulled on HP.
 - In `json-schema` mode, the shim wraps the Ollama/EMR `format` object in the
   R11-verified nested OpenAI-style shape:
   `response_format: {"type":"json_schema","json_schema":{"name":"explain_response","strict":true,"schema":...}}`.
 - Default remains `--schema-mode json-object` for backward compatibility.
 - `json-schema` mode fails closed with HTTP 400 if the request has no JSON
   object `format` schema, and does not call upstream in that case.
-- Validation passed in working tree:
+- Validation before commit/push: `py_compile` passed,
   `python -m unittest tests.test_hpz2_ollama_compat_llamacpp_shim` ran 9 tests
-  successfully.
+  successfully, and `git diff --check` passed with CRLF warnings only.
 - Shape review found the first flat working-tree draft did not match the R11 HP
   probe artifact; the implementation was corrected to the nested shape before
   commit/push.
 - This implementation still does not authorize `/explain`, model execution,
   matrix runs, EMR writes, cleanup, download, commit, or push without separate
   GO.
+
+R13 H2 schema-mode A/B plan freeze (2026-05-30):
+
+- Plan doc: `docs/h2-schema-mode-ab-plan-2026-05-30.md`.
+- Purpose: resolve the R12 carry note that R11/R12 prove accepted shape and
+  forwarding, but not hard schema enforcement across longer clinical prompts.
+- Frozen minimal matrix is 4 cells:
+  `RA-03-safety-boundary` + `RA-05-rule-kb-nuance-conflict` crossed with
+  `json_object` + `json_schema` on `hpz2-l2-qwen36-35b-a3b`.
+- RA-03 values remain locked: `sme + trimesy + lacto2`, `dx=a090`, pediatric
+  `age=1`.
+- RA-05 values for this A/B: `dx=a09`, `orders=tamiiv`, pediatric `age=11`.
+  RA-05 is structure/schema-enforcement evidence only; do not use it for final
+  content-quality verdicts because expected summary wording and clinical input
+  review are user-owned pending.
+- Optional expansion to `hpz2-l2-granite-41-30b-q4km` is an 8-cell run and
+  requires separate explicit approval.
+- Decision rules are pre-registered in the plan: RA-05 `json_schema` conforming
+  while `json_object` drifts selects `json_schema`; no meaningful structural
+  difference selects `json_object` plus strict-schema conformance metric/caveat.
+- Safety envelope: SSH tunnel/loopback only, env override only, no
+  `data/llm_settings.json` write, PHI hit count `0` hard gate,
+  shutdown/ports-closed verification, and PHI-safe metadata only.
+- This plan freeze does not authorize `/explain`, HP runtime startup, model
+  execution, matrix execution, EMR writes, cleanup, downloads, commit, or push.
 
 ## Hard Stops
 
@@ -225,4 +254,10 @@ R12 shim json_schema mode implementation (2026-05-30):
   broader explicit GO; it runs more than one case and writes report artifacts.
 - Do not treat H1 RA-03 PASS as permission for more `/explain` cases, Phase 2
   heavy run, matrix execution, EMR writes, cleanup, or downloads.
+- Do not treat H2 A/B plan freeze as permission to execute H2 A/B, start HP
+  runtime, or call `/explain`; execution requires a separate explicit GO.
+- Do not use RA-05 for final content-quality verdicts until the user-owned
+  expected-summary and clinical-input checks are complete.
+- Do not expand H2 A/B from the frozen 4-cell Qwen matrix to Granite or 8 cells
+  without separate explicit approval.
 - Do not commit or push unless explicitly requested.

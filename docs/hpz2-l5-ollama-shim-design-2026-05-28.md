@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed-h1-pass-shutdown-r10
+status: implemented-step3-reviewed-h1-pass-shutdown-schema-probe-r11
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -366,6 +366,47 @@ no cleanup/download, no commit, and no push during the shutdown step.
 Carry: HP `local-llm-eval` is still at R8 (`0f2da81`) and should pull/verify
 repo doc R9 (`304836e`) before the next HP task that depends on repo docs.
 
+## Schema Fidelity Capability Probe R11
+
+Status: PASS for minimal capability. llama.cpp `b9333` accepted both tested
+`response_format` shapes in a direct loopback `/v1/chat/completions` probe.
+
+Probe boundary:
+
+- HP Z2 narrow runtime probe only.
+- Model: `hpz2-l2-qwen36-35b-a3b`.
+- Direct `llama-server` only; no shim, no EMR `/explain`, no `/api/generate`.
+- Prompt/content: minimal synthetic non-PHI probe.
+- Log folder: `C:\Users\test\AppData\Local\Temp\hpz2-schema-fidelity-probe-20260530-170135`.
+
+Result metadata:
+
+| response_format | HTTP | accepted | valid JSON | strict schema match | latency | server error |
+|---|---:|---|---|---|---:|---|
+| `{"type":"json_object"}` | 200 | yes | yes | yes | `483.7 ms` | none |
+| OpenAI-style `{"type":"json_schema","json_schema":...}` | 200 | yes | yes | yes | `434.2 ms` | none |
+
+Shutdown:
+
+- `llama-server` PID `62200`: stopped successfully.
+- `127.0.0.1:18080`: no listener after shutdown.
+- HP `local-llm-eval`: clean at `66733a8`.
+
+Limitations:
+
+- This confirms minimal capability only. It does not prove full behavior across
+  longer clinical prompts, larger contexts, weaker models, or multi-case H2
+  comparisons.
+- H2+ quality conclusions should still use one fixed structured-output mode and
+  document that mode.
+
+Next implementation gate:
+
+- Add a shim mode that forwards EMR strict `format` schema to llama.cpp
+  OpenAI-style `json_schema`, guarded by tests and docs.
+- Do not enter that implementation without explicit
+  `shim json_schema mode implementation GO`.
+
 ## STOP 조건
 
 즉시 중단:
@@ -443,3 +484,9 @@ endpoint-readiness check. This does not authorize L5 heavy run, additional
 `/explain` cases, matrix execution, EMR writes, cleanup, or downloads. R10
 confirmed the H1 runtime shutdown; HP still needs to pull/verify repo doc R9
 `304836e` before the next HP doc-dependent task.
+
+R11 addendum: HP schema fidelity capability probe confirmed llama.cpp `b9333`
+accepts both `json_object` and OpenAI-style `json_schema` response formats in a
+minimal synthetic direct `/v1/chat/completions` probe. The next repo gate is
+`shim json_schema mode implementation GO`; this is not H2 or heavy-run
+authorization.

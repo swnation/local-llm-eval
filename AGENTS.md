@@ -173,6 +173,24 @@ R10 H1 runtime shutdown sync (2026-05-30):
   Before the next HP work that depends on repo docs, pull/verify latest
   `origin/main`.
 
+R11 schema fidelity capability probe sync (2026-05-30):
+
+- HP ran a narrow direct `llama-server` `/v1/chat/completions` probe on
+  `hpz2-l2-qwen36-35b-a3b` without shim or EMR `/explain`.
+- llama.cpp `b9333` accepted `response_format: {"type":"json_object"}`:
+  HTTP 200, valid JSON, strict `{summary: string, citations: string[]}` schema
+  match, no server error, latency `483.7 ms`.
+- llama.cpp `b9333` accepted OpenAI-style `response_format:
+  {"type":"json_schema", "json_schema": ...}` with an EXPLAIN-like schema:
+  HTTP 200, valid JSON, strict schema match, no server error, latency
+  `434.2 ms`.
+- Runtime shutdown confirmed after probe: `llama-server` PID `62200` stopped and
+  `127.0.0.1:18080` had no listener.
+- Limitation: this was a minimal synthetic non-PHI capability probe, not proof
+  across longer clinical prompts.
+- Next recommended gate: `shim json_schema mode implementation GO` before H2+
+  quality conclusions.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.

@@ -2,7 +2,7 @@
 id: hpz2-l5-ollama-shim-design-2026-05-28
 project: local-llm-eval
 type: runbook
-status: implemented-step3-reviewed-h1-pass-r9
+status: implemented-step3-reviewed-h1-pass-shutdown-r10
 created: 2026-05-28
 updated: 2026-05-30
 scope: HP Z2 local Ollama-compatible shim for Phase 2 L5 minimal smoke
@@ -340,9 +340,31 @@ Carry:
 - H2+ quality conclusions still require a schema-fidelity decision. The shim
   currently sends llama.cpp `response_format: {"type":"json_object"}` rather
   than forwarding the strict EMR `format` schema.
-- If HP runtime shutdown is not separately confirmed after the tunneled H1 run,
-  verify/stop the H1 `llama-server` and shim processes before any next HP
-  runtime work.
+- R9 note: runtime shutdown still required a separate HP report at the time of
+  the H1 result sync.
+
+## H1 Runtime Shutdown Result R10
+
+Status: DONE. HP confirmed the tunneled H1 runtime was stopped after the
+one-case RA-03 run.
+
+Shutdown evidence:
+
+- shim PID `24380`: validated and stopped
+- `llama-server` PID `55796`: validated and stopped
+- `127.0.0.1:18080`: no listener
+- `127.0.0.1:18081`: no listener
+
+Final HP repo status:
+
+- `EMR_AI_24clinic`: clean, `543e1f9 feat(case-review): add core6 rule engine`
+- `local-llm-eval`: clean, `0f2da81 docs(rag): pin H1 smoke plan baselines`
+
+Boundaries confirmed: no `/explain`, no `/api/generate`, no edits, no matrix,
+no cleanup/download, no commit, and no push during the shutdown step.
+
+Carry: HP `local-llm-eval` is still at R8 (`0f2da81`) and should pull/verify
+repo doc R9 (`304836e`) before the next HP task that depends on repo docs.
 
 ## STOP 조건
 
@@ -418,6 +440,6 @@ H1에서 확인할 carry:
 
 R9 addendum: H1 RA-03 tunneled smoke has passed as a one-case
 endpoint-readiness check. This does not authorize L5 heavy run, additional
-`/explain` cases, matrix execution, EMR writes, cleanup, or downloads. Before
-the next HP runtime step, confirm the H1 runtime processes are shut down if that
-shutdown was not already reported separately.
+`/explain` cases, matrix execution, EMR writes, cleanup, or downloads. R10
+confirmed the H1 runtime shutdown; HP still needs to pull/verify repo doc R9
+`304836e` before the next HP doc-dependent task.

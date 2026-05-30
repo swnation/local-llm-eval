@@ -160,9 +160,18 @@ R9 H1 RA-03 result sync (2026-05-30):
   downloads, or H2+ quality conclusions. H2+ quality comparisons must revisit
   schema fidelity because the shim still maps EMR strict `format` schema to
   llama.cpp `json_object`.
-- Runtime carry: if HP runtime shutdown is not separately confirmed after the
-  tunneled H1 run, verify/stop the H1 `llama-server` and shim processes before
-  any next HP runtime work.
+- Runtime carry at R9 entry: shutdown was still awaiting separate HP report.
+
+R10 H1 runtime shutdown sync (2026-05-30):
+
+- HP confirmed tunneled H1 runtime shutdown: shim PID `24380` validated and
+  stopped; `llama-server` PID `55796` validated and stopped; ports
+  `127.0.0.1:18080` and `127.0.0.1:18081` have no listener.
+- HP final repo status after shutdown: `EMR_AI_24clinic` clean at `543e1f9`;
+  `local-llm-eval` clean at `0f2da81`.
+- Carry: HP `local-llm-eval` has not yet pulled repo doc R9 commit `304836e`.
+  Before the next HP work that depends on repo docs, pull/verify latest
+  `origin/main`.
 
 ## Hard Stops
 

@@ -58,13 +58,13 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 RA-03 smoke PASS |
-| Current repo HEAD | `0f2da81` (`docs(rag): pin H1 smoke plan baselines`) at R9 entry; after R9 commit/push use latest `origin/main` |
-| Current tracker status | live R9 H1 result doc-sync: one-case tunneled RA-03 `/explain` PASS recorded; broader L5 still blocked |
-| Next recommended GO | If HP H1 runtime shutdown is not already confirmed, verify/stop it first; then decide `schema fidelity decision GO` or H2/H3 planning |
+| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 RA-03 smoke PASS / H1 runtime shutdown confirmed |
+| Current repo HEAD | `304836e` (`docs(rag): record H1 RA-03 smoke pass`) at R10 entry; after R10 commit/push use latest `origin/main` |
+| Current tracker status | live R10 H1 shutdown doc-sync: one-case tunneled RA-03 `/explain` PASS recorded and HP runtime stopped; broader L5 still blocked |
+| Next recommended GO | `HP local-llm-eval R9 pull/verify GO`, then decide `schema fidelity decision GO` or H2/H3 planning |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
-| L5 hard blocker | H1 PASS does not authorize broader L5; remaining blockers are RA-03 user-owned final checks, schema-fidelity decision before H2+ quality conclusions, and explicit `Phase 2 heavy run GO` |
+| L5 hard blocker | H1 PASS + shutdown do not authorize broader L5; remaining blockers are HP repo doc refresh, RA-03 user-owned final checks, schema-fidelity decision before H2+ quality conclusions, and explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
 | Runtime lane | llama.cpp primary / LM Studio secondary; L5 shim provides local Ollama-compatible adapter only |
 
@@ -78,7 +78,7 @@ Rules:
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 shim adapter | implemented-reviewed-h1-pass | 2026-05-28 | 2026-05-30 | `21c6379` / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS for H1 plumbing | H1 RA-03 PASS documented; schema fidelity remains before H2+ quality conclusions |
-| L5 real endpoint | h1-smoke-pass-broader-blocked | 2026-05-30 | 2026-05-30 | PHI-safe H1 metadata packet; no raw response text recorded | one-case PASS | no additional cases/matrix without separate GO; broader L5 requires RA-03 checks and `Phase 2 heavy run GO` |
+| L5 real endpoint | h1-smoke-pass-shutdown-broader-blocked | 2026-05-30 | 2026-05-30 | PHI-safe H1 metadata packet; no raw response text recorded; shutdown packet | one-case PASS + runtime stopped | HP should pull R9 docs; no additional cases/matrix without separate GO; broader L5 requires RA-03 checks and `Phase 2 heavy run GO` |
 
 ## 3. Parallel Track Status
 
@@ -115,6 +115,7 @@ Rules:
 | `H1 minimal /explain smoke plan GO` | Plan a one-case H1 smoke with preflight, env override, JSON validity check, logging/PHI guard, and shutdown boundary | H1 plan packet | plan only; no `/explain`, no EMR write, no settings file write, no model matrix |
 | `HP EMR baseline refresh GO` | Refresh HP `C:\Github\EMR_AI_24clinic` to known origin state and report clean HEAD | HP EMR baseline packet | no `/explain`, no llama-server, no shim, no file edits, no commit/push |
 | `HP local-llm-eval R8 pull/verify GO` | Pull latest `local-llm-eval` docs after R8 commit/push and report clean HEAD | HP local-llm-eval sync packet | no model execution, no `/explain`, no EMR write |
+| `HP local-llm-eval R9 pull/verify GO` | Pull repo doc R9 `304836e` or newer on HP after H1 shutdown and report clean HEAD | HP local-llm-eval sync packet | no model execution, no `/explain`, no EMR write, no commit/push |
 | `H1 minimal /explain smoke execution GO (RA-03 only)` | Execute exactly one RA-03 `/explain` smoke through the reviewed H1 harness and then teardown | H1 one-case result packet | no second case, no `scripts/smoke_test_explain.py`, no settings file write, no EMR repo write, stop after first failure |
 | `Main PC tunneled H1 RA-03 execution GO` | Execute the H1 harness from Main PC through an SSH tunnel to HP loopback shim | H1 one-case result packet | one request only; close tunnel after request; no EMR file write; no second case; no matrix |
 | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells | Phase 2 result packet | requires separate explicit GO, RA-03 checks, and EMR read-only constraints |
@@ -309,9 +310,26 @@ Append new result entries below. Keep old entries intact.
     matrix execution, EMR writes, cleanup/download, or `Phase 2 heavy run GO`.
   - H2+ quality conclusions require schema-fidelity review because the shim
     maps EMR strict `format` schema to llama.cpp `json_object`.
-  - If HP runtime shutdown is not separately confirmed after the tunneled H1
-    run, verify/stop the H1 `llama-server` and shim processes before any next
-    HP runtime work.
+  - R9 result sync still needed a separate HP runtime shutdown report.
+
+### H1 tunneled runtime shutdown
+
+- Status: DONE
+- Reported: 2026-05-30
+- Shutdown evidence:
+  - shim PID `24380`: validated and stopped
+  - `llama-server` PID `55796`: validated and stopped
+  - `127.0.0.1:18080`: no listener
+  - `127.0.0.1:18081`: no listener
+- Final HP repo status:
+  - `EMR_AI_24clinic`: clean at `543e1f9 feat(case-review): add core6 rule engine`
+  - `local-llm-eval`: clean at `0f2da81 docs(rag): pin H1 smoke plan baselines`
+- Boundaries confirmed: no `/explain`, no `/api/generate`, no edits, no matrix,
+  no cleanup/download, no commit, and no push.
+- Carry:
+  - H1 runtime shutdown is closed.
+  - HP `local-llm-eval` remains at R8 (`0f2da81`); before the next HP task that
+    depends on repo docs, pull/verify R9 (`304836e`) or newer.
 
 ### L5 Ollama-compatible shim adapter
 
@@ -342,8 +360,9 @@ Append new result entries below. Keep old entries intact.
   - H1 confirmed valid JSON and model-name mapping for one RA-03 request.
   - H2+ quality comparisons must revisit schema fidelity because the shim maps strict EMR `format` to llama.cpp `json_object` only.
 - H1 result: one-case tunneled RA-03 `/explain` PASS recorded in R9.
-- Next GO: verify/stop HP H1 runtime if not already confirmed, then decide
-  schema fidelity or H2/H3 planning.
+- H1 runtime shutdown: confirmed in R10.
+- Next GO: HP `local-llm-eval` R9 pull/verify, then decide schema fidelity or
+  H2/H3 planning.
 
 ## 6. STOP Carry
 
@@ -383,3 +402,4 @@ Append new result entries below. Keep old entries intact.
 | R7 | 2026-05-30 | Synced tracker after HP Step 3 health preflight/shutdown and Claude shim review PASS. Next gate is H1 minimal `/explain` smoke planning, not execution. |
 | R8 | 2026-05-30 | Corrected H1 audit pins, separated current repo/doc baseline from shim implementation commit, recorded HP EMR baseline drift, narrowed H1 to one RA-03 harness call, and added HP repo refresh gates before execution. |
 | R9 | 2026-05-30 | Recorded tunneled H1 RA-03 one-case `/explain` PASS: HTTP 200, EMR `ok`, valid JSON, citation verifier pass, PHI hits `0`, one request only, repos clean, and broader L5 still blocked without separate GO. |
+| R10 | 2026-05-30 | Recorded HP H1 runtime shutdown: shim PID `24380` and `llama-server` PID `55796` stopped, ports `18080`/`18081` no listener, HP repos clean, and HP `local-llm-eval` still needs R9 pull before next doc-dependent work. |

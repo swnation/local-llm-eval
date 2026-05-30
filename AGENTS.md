@@ -239,6 +239,35 @@ R13 H2 schema-mode A/B plan freeze (2026-05-30):
 - This plan freeze does not authorize `/explain`, HP runtime startup, model
   execution, matrix execution, EMR writes, cleanup, downloads, commit, or push.
 
+R14 H2 schema-mode A/B execution result (2026-05-30/31):
+
+- Executed the A/B; the frozen 4-cell matrix was expanded to 8 cells with
+  explicit approval (added `hpz2-l2-granite-41-30b-q4km`).
+- 8/8 cells PASS: HTTP 200, EMR `ok`, valid JSON, strict schema conformant,
+  structural drift NO, citation verifier pass, PHI hit `0`, for both Qwen 35B
+  A3B official and Granite 4.1 30B across `json_object` and `json_schema`.
+- Decision: pre-registered Rule 2 (no meaningful structural difference) ->
+  H2 uses `json_object` plus a strict-schema conformance metric and caveat.
+- Honest caveat: the discriminating case RA-05 did not drift under `json_object`
+  either, so enforcement was not demonstrated and `json_object` was not observed
+  failing. The result is mode-invariance for 2 cases x 2 Primary-tier models
+  only, not general `json_object` safety. Keep the conformance metric live as a
+  tripwire for weaker models / harder cases.
+- HP runtime torn down (pair 4: shim PID `63764`, `llama-server` PID `42084`
+  stopped; ports `18080`/`18081` no listener). HP repos clean at
+  `local-llm-eval 08a94af` / `EMR_AI_24clinic 543e1f9`.
+- EMR pin note: Main PC `EMR_AI_24clinic` advanced `543e1f9 -> c6dc30c`
+  (`feat(case-review): add core6 r3 rule context`, clinical-assist track);
+  `app/llm/` unchanged, so the A/B contract basis is intact.
+- Process-safety incident (low severity, no data loss): a user-opened Excel view
+  of `knowledge/master_data/처방자료-모두.xls` was flagged modified; run recovery
+  killed the user `EXCEL.EXE` and reverted the file. User confirmed view-only, so
+  no data was lost. Corrective rule: do not auto-revert files the agent did not
+  modify and do not kill user processes; on a shared workstation, STOP and
+  surface user-caused dirty state instead.
+- This result does not authorize Phase 2 heavy run, more `/explain` cases,
+  matrix, EMR writes, cleanup, downloads, commit, or push.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.
@@ -258,6 +287,9 @@ R13 H2 schema-mode A/B plan freeze (2026-05-30):
   runtime, or call `/explain`; execution requires a separate explicit GO.
 - Do not use RA-05 for final content-quality verdicts until the user-owned
   expected-summary and clinical-input checks are complete.
-- Do not expand H2 A/B from the frozen 4-cell Qwen matrix to Granite or 8 cells
-  without separate explicit approval.
+- Do not expand H2 A/B beyond the executed 8-cell (Qwen + Granite) set without
+  separate explicit approval.
+- Do not treat the H2 A/B Rule-2 result (`json_object` chosen) as proof of
+  general `json_object` safety; the discriminating case did not drift, so keep
+  the strict-schema conformance metric live in H2 and do not drop `json_schema`.
 - Do not commit or push unless explicitly requested.

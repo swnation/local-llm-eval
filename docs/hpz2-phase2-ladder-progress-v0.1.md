@@ -58,13 +58,13 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0 complete / L1 complete / LM Studio L2 complete as secondary / llama.cpp primary lane locked / L2 full matrix complete / shortlist locked / L5 shim adapter implemented / Step 3 health preflight complete / shim review PASS / H1 RA-03 smoke PASS / H1 runtime shutdown confirmed / schema fidelity capability probe PASS / shim json_schema mode committed+pushed+HP-pulled / H2 schema-mode A/B execution plan frozen |
-| Current repo HEAD | `dd646db` (`feat(rag): add shim json_schema response mode`) at H2 A/B plan-freeze entry; R13 plan-freeze doc changes are working tree until separate commit/push GO |
-| Current tracker status | H2 A/B execution plan frozen in `docs/h2-schema-mode-ab-plan-2026-05-30.md`: RA-03 + RA-05 x `json_object` + `json_schema` x Qwen 35B A3B official; RA-05 is structure/schema-enforcement only |
-| Next recommended GO | `H2 A/B execution plan review GO`, then commit/push + HP pull/verify, then `H2 A/B execution GO (4-cell minimal)` |
+| Current level | L0/L1 complete / llama.cpp primary lane locked / L2 full matrix / shortlist locked / L5 shim implemented / Step 3 + shutdown / shim review PASS / H1 RA-03 PASS / schema probe PASS / json_schema mode committed / H2 A/B plan frozen / **H2 A/B 8-cell executed (8/8 PASS, no structural drift)** / **schema mode decided = json_object (Rule 2)** |
+| Current repo HEAD | `08a94af` (`docs(rag): freeze H2 schema mode A/B plan`) committed+pushed+HP-pulled; **H2 A/B result-sync (R14) doc changes are working tree** until separate commit/push GO |
+| Current tracker status | H2 A/B 8-cell complete (Qwen 35B A3B official + Granite 4.1 30B x `json_object` + `json_schema`); **Rule 2 -> H2 = `json_object` + strict-schema conformance metric/caveat**; discrimination null (RA-05 did not drift in either mode -> json_schema enforcement undemonstrated, not disproven); HP runtime shut down; broader L5 still blocked |
+| Next recommended GO | this H2 result-sync `commit + push GO` + HP pull, then **H2 model-comparison planning** (`json_object` fixed, strict-schema conformance metric live as a tripwire) |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
-| L5 hard blocker | H1 PASS + shutdown + schema capability probe + R12 implementation + R13 A/B plan freeze do not authorize broader L5; remaining blockers are plan review/commit/push/HP pull, RA-03 user-owned final checks, fixed schema-mode decision, and explicit execution GO |
+| L5 hard blocker | H1 PASS + shutdown + schema probe + R12 + R13 plan + H2 A/B 8-cell + schema mode decided (`json_object`) do not authorize broader L5; remaining blockers are RA-03 user-owned final checks, sufficient L2-L4 evidence, and explicit `Phase 2 heavy run GO` |
 | Disk hard floor | `C:` free space >= 100 GB |
 | Runtime lane | llama.cpp primary / LM Studio secondary; L5 shim provides local Ollama-compatible adapter only |
 
@@ -78,7 +78,7 @@ Rules:
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 shim adapter | implemented-reviewed-h1-pass-schema-probe-jsonschema-committed-hp-pulled | 2026-05-28 | 2026-05-30 | `21c6379` original shim / `dd646db` R12 json_schema mode / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS for H1 plumbing; schema probe PASS; R12 unit tests PASS; HP pull/verify PASS | H2 A/B plan review and later execution GO |
-| L5 real endpoint | h1-smoke-pass-shutdown-schema-probe-jsonschema-plan-frozen-broader-blocked | 2026-05-30 | 2026-05-30 | PHI-safe H1 metadata packet; no raw response text recorded; shutdown packet; schema probe packet; R12 commit; R13 plan doc | one-case PASS + runtime stopped + capability probe PASS + R12 unit tests PASS + R13 plan freeze | no additional cases/matrix without separate GO; broader L5 requires plan review/commit/push/HP pull, RA-03 checks, fixed schema-mode decision, and `Phase 2 heavy run GO` |
+| L5 real endpoint | h1-pass-shutdown-schema-probe-jsonschema-h2ab-8cell-pass-mode-json_object-broader-blocked | 2026-05-30/31 | 2026-05-31 | PHI-safe H1 + H2 A/B metadata packets; no raw response text; shutdown packets; schema probe packet; R12 commit; R13 plan doc; R14 result doc | H1 one-case PASS + probe PASS + H2 A/B 8/8 PASS (no structural drift) + **schema mode decided = json_object (Rule 2)** | no additional cases/matrix without separate GO; broader L5 requires RA-03 checks, sufficient L2-L4 evidence, and `Phase 2 heavy run GO` (schema mode now fixed) |
 
 ## 3. Parallel Track Status
 

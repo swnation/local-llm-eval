@@ -206,3 +206,52 @@ Recommended sequence:
 
 Optional expansion requires a separate explicit phrase such as
 `H2 A/B execution GO (+Granite 8-cell)`.
+
+## Result & Decision (R14, 2026-05-30/31)
+
+Executed under explicit GO. The frozen 4-cell matrix was expanded to 8 cells
+with explicit approval (added `hpz2-l2-granite-41-30b-q4km`). Each pair ran an
+HP loopback `llama-server` + shim, reached by the Main PC EMR `.venv` harness
+over an SSH tunnel; runtime was torn down between pairs and after the final pair
+(ports `18080`/`18081` confirmed no listener).
+
+Result: **8/8 cells PASS** — HTTP 200, EMR status `ok`, valid JSON, strict schema
+conformant, **structural drift NO**, citation verifier pass, PHI hit count `0`.
+Holds for both Qwen 35B A3B official and Granite 4.1 30B, across `json_object`
+and `json_schema`.
+
+Decision: **Pre-registered Rule 2** applies (no meaningful structural difference)
+-> **H2 uses `json_object`** plus a strict-schema conformance metric and caveat.
+
+Honest caveat (this is the metric/caveat Rule 2 requires):
+
+- The discriminating case RA-05 did **not** drift under `json_object` either, so
+  this A/B did not actually exercise the discrimination. We did **not** demonstrate
+  `json_schema` hard enforcement, and did **not** observe `json_object` failing.
+- The result means "mode-invariant for these 2 cases x 2 Primary-tier models",
+  **not** "`json_object` is generally safe". `json_object` adequacy here rests on
+  the strong prompt + strong (Primary) models; it is unproven for weaker models,
+  harder cases, or longer prompts.
+- Keep the strict-schema conformance metric **live in H2 as a tripwire**.
+  `json_schema` enforcement remains undemonstrated, not disproven.
+
+RA-05 carry: structure/schema evidence only here, not a content-quality verdict
+(expected-summary wording + clinical input review remain user-owned). Content
+aside for H2 (not a mode signal): Granite returned 1 citation on RA-03 vs Qwen's
+3 (RA-03 expects 3) — a model completeness signal to track in H2.
+
+Runtime/repo: HP runtime torn down (pair 4: shim PID `63764`, `llama-server` PID
+`42084` stopped; ports closed). HP repos clean at `local-llm-eval 08a94af` /
+`EMR_AI_24clinic 543e1f9`. Main PC `EMR_AI_24clinic` advanced
+`543e1f9 -> c6dc30c` (`feat(case-review): add core6 r3 rule context`,
+clinical-assist track); `app/llm/` unchanged, so the A/B contract basis is intact.
+
+Process-safety incident (low severity, no data loss): a user-opened Excel view of
+`knowledge/master_data/처방자료-모두.xls` was flagged modified; run recovery killed
+the user `EXCEL.EXE` and reverted the file. User confirmed view-only, so no data
+was lost. Corrective rule: do not auto-revert files the agent did not modify and
+do not kill user processes; on a shared workstation, STOP and surface user-caused
+dirty state instead.
+
+This result does not authorize Phase 2 heavy run, additional `/explain` cases,
+matrix execution, EMR writes, cleanup, downloads, commit, or push.

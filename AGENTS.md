@@ -18,7 +18,9 @@ The active goal is RAG-aware Phase 2 evaluation planning for `EMR_AI_24clinic` `
 Current planning artifacts:
 
 - `docs/rag_aware_eval_design_r0.md` = Phase 2.1 design R1 frozen baseline, with R2 pre-L2 semantic-first update
-- `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.1, with R2 four-lane/P7/acceptable-citation additions
+- `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.2.1, 17 cases; RA-06/RA-07 added, RA-08 removed
+- `docs/h2-schema-mode-ab-plan-2026-05-30.md` = R13/R14 schema-mode A/B plan/result; H2 schema mode fixed to `json_object` plus strict-schema conformance metric/caveat
+- `docs/h2-model-comparison-plan-2026-05-31.md` = R15 H2 model-comparison plan freeze: Primary 4 x 17-case eval set, `json_object` fixed, 64 model-call cells, execution still gated
 - `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json` = Phase 2 Stage A LM Studio config R0.2 (includes all HP Z2 LM Studio smoke-pass models + execution pacing)
 - `models_config_hpz2_lmstudio_phase2_l2_semantic_v0.1.json` = L2 synthetic semantic smoke config over HP Z2 L0/L1 model catalog
 - `models_config_hpz2_llamacpp_phase2_l2_v0.1.json` = primary HP Z2 llama.cpp L2 synthetic semantic config after backend lane decision lock (2026-05-26); LM Studio L2 remains secondary/historical
@@ -268,6 +270,32 @@ R14 H2 schema-mode A/B execution result (2026-05-30/31):
 - This result does not authorize Phase 2 heavy run, more `/explain` cases,
   matrix, EMR writes, cleanup, downloads, commit, or push.
 
+R15 H2 model-comparison plan freeze (2026-05-31):
+
+- Plan doc: `docs/h2-model-comparison-plan-2026-05-31.md`.
+- Purpose: compare the locked Primary shortlist under one fixed `/explain`
+  endpoint condition to recommend a model or decline if evidence is
+  insufficient.
+- Fixed condition: schema mode `json_object` from R14, strict-schema
+  conformance metric live as a tripwire, `top_k=5`, `min_similarity=0.45`,
+  `lexical_rerank=false`, prompt/tone unchanged. Model is the only variable.
+- Model scope: Primary 4 only:
+  `hpz2-l2-qwen36-35b-a3b`,
+  `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`,
+  `hpz2-l2-qwen36-35b-a3b-mtp-q8`,
+  `hpz2-l2-granite-41-30b-q4km`.
+- Reference/historical models are out of scope unless separately approved.
+- Case scope: 17 total eval cases. RA-04 is PHI early-return and must not call
+  the model, so the expected model-call cells are 4 models x 16 cases = 64.
+- RA-06/RA-07 are included, but their content-quality verdict remains
+  provisional until user-owned expected-summary keyword spot-check is closed.
+  RA-06 is retained as a hard-case tripwire for multi-citation behavior and
+  structural/schema conformance.
+- Recommended next sequence: plan review, plan commit/push, HP pull/verify,
+  optional RA-06/RA-07 keyword spot-check, then explicit `Phase 2 heavy run GO`.
+- This plan freeze does not authorize `/explain`, HP runtime startup, model
+  execution, matrix execution, EMR writes, cleanup, downloads, commit, or push.
+
 ## Hard Stops
 
 - Do not run models or heavy eval without explicit GO.
@@ -292,4 +320,12 @@ R14 H2 schema-mode A/B execution result (2026-05-30/31):
 - Do not treat the H2 A/B Rule-2 result (`json_object` chosen) as proof of
   general `json_object` safety; the discriminating case did not drift, so keep
   the strict-schema conformance metric live in H2 and do not drop `json_schema`.
+- Do not treat H2 model-comparison plan freeze as permission to execute H2,
+  start HP runtime, call `/explain`, or run model matrices; execution still
+  requires explicit `Phase 2 heavy run GO`.
+- Do not use RA-06/RA-07 for final content-quality verdicts until the
+  user-owned expected-summary keyword spot-check is closed; if run earlier,
+  label their content lanes provisional.
+- Do not add reference/historical models to H2 model comparison without a
+  separate review and explicit user GO.
 - Do not commit or push unless explicitly requested.

@@ -58,10 +58,10 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Current level | L0/L1 complete / llama.cpp primary lane locked / L2 full matrix / shortlist locked / L5 shim implemented / Step 3 + shutdown / shim review PASS / H1 RA-03 PASS / schema probe PASS / json_schema mode committed / H2 A/B plan frozen / **H2 A/B 8-cell executed (8/8 PASS, no structural drift)** / **schema mode decided = json_object (Rule 2)** |
-| Current repo HEAD | `78bfcd1` (`docs(rag): promote eval_set v0.2 RA-06/RA-07`) committed+pushed; R14 H2 A/B result-sync is already committed+pushed at `f0e4671` and HP-pulled |
-| Current tracker status | H2 A/B 8-cell complete (Qwen 35B A3B official + Granite 4.1 30B x `json_object` + `json_schema`); **Rule 2 -> H2 = `json_object` + strict-schema conformance metric/caveat**; discrimination null (RA-05 did not drift in either mode -> json_schema enforcement undemonstrated, not disproven); HP runtime shut down; broader L5 still blocked |
-| Next recommended GO | HP `local-llm-eval` pull/verify to `78bfcd1` if not already done after eval_set v0.2, then **H2 model-comparison planning** (`json_object` fixed, strict-schema conformance metric live as a tripwire); publish this tracker self-ref fix only with separate commit/push GO |
+| Current level | L0/L1 complete / llama.cpp primary lane locked / L2 full matrix / shortlist locked / L5 shim implemented / Step 3 + shutdown / shim review PASS / H1 RA-03 PASS / schema probe PASS / json_schema mode committed / H2 A/B plan frozen / **H2 A/B 8-cell executed (8/8 PASS, no structural drift)** / **schema mode decided = json_object (Rule 2)** / **H2 model-comparison plan frozen (working tree pending commit/push)** |
+| Current repo HEAD | `b1517ed` (`docs(rag): sync R14 tracker self-reference`) committed+pushed; H2 model-comparison plan freeze docs are working tree until separate commit/push GO |
+| Current tracker status | H2 model-comparison plan frozen: Primary 4 only, 17 cases, `json_object` fixed, strict-schema conformance metric live, expected 64 model-call cells; RA-06/RA-07 content verdicts provisional until user-owned keyword spot-check; broader L5 still blocked |
+| Next recommended GO | `H2 model-comparison plan review GO`, then plan commit/push + HP pull/verify; optional RA-06/RA-07 keyword spot-check before `Phase 2 heavy run GO` |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
 | L5 hard blocker | H1 PASS + shutdown + schema probe + R12 + R13 plan + H2 A/B 8-cell + schema mode decided (`json_object`) do not authorize broader L5; remaining blockers are RA-03 user-owned final checks, sufficient L2-L4 evidence, and explicit `Phase 2 heavy run GO` |
@@ -78,7 +78,7 @@ Rules:
 | L3 normalizer feasibility | blocked | - | - | - | - | requires L2 results + runner-side normalizer prototype |
 | L4 native contract check | blocked | - | - | - | - | requires L2/L3 review and explicit L4 GO |
 | L5 shim adapter | implemented-reviewed-h1-pass-schema-probe-jsonschema-committed-hp-pulled | 2026-05-28 | 2026-05-30 | `21c6379` original shim / `dd646db` R12 json_schema mode / `docs/hpz2-l5-ollama-shim-design-2026-05-28.md` | PASS for H1 plumbing; schema probe PASS; R12 unit tests PASS; HP pull/verify PASS | H2 A/B plan review and later execution GO |
-| L5 real endpoint | h1-pass-shutdown-schema-probe-jsonschema-h2ab-8cell-pass-mode-json_object-broader-blocked | 2026-05-30/31 | 2026-05-31 | PHI-safe H1 + H2 A/B metadata packets; no raw response text; shutdown packets; schema probe packet; R12 commit; R13 plan doc; R14 result doc | H1 one-case PASS + probe PASS + H2 A/B 8/8 PASS (no structural drift) + **schema mode decided = json_object (Rule 2)** | no additional cases/matrix without separate GO; broader L5 requires RA-03 checks, sufficient L2-L4 evidence, and `Phase 2 heavy run GO` (schema mode now fixed) |
+| L5 real endpoint | h1-pass-shutdown-schema-probe-jsonschema-h2ab-8cell-pass-mode-json_object-h2-model-plan-frozen-broader-blocked | 2026-05-30/31 | 2026-05-31 | PHI-safe H1 + H2 A/B metadata packets; no raw response text; shutdown packets; schema probe packet; R12 commit; R13/R15 plan docs; R14 result doc | H1 one-case PASS + probe PASS + H2 A/B 8/8 PASS (no structural drift) + **schema mode decided = json_object (Rule 2)** + H2 model-comparison plan frozen | no model-comparison run without separate `Phase 2 heavy run GO`; RA-06/RA-07 content verdicts provisional until user-owned keyword spot-check |
 
 ## 3. Parallel Track Status
 
@@ -122,6 +122,8 @@ Rules:
 | `shim json_schema mode implementation GO` | Add/test/document a shim mode that forwards EMR strict `format` schema to llama.cpp OpenAI-style `json_schema` | repo diff + tests + docs | no `/explain`, no model execution, no EMR write; commit/push separate unless explicitly bundled |
 | `H2 A/B execution plan freeze GO` | Freeze the limited schema-mode A/B plan and decision rules before any multi-call `/explain` work | plan doc + tracker/relay sync | docs only; no `/explain`, no HP runtime start, no EMR write, no model/matrix/cleanup/download; commit/push separate |
 | `H2 A/B execution GO (4-cell minimal)` | Run RA-03 and RA-05 across `json_object` and `json_schema` on Qwen 35B A3B official | PHI-safe 4-cell A/B result packet | requires reviewed/committed plan and HP pull; no Granite expansion, raw response relay, EMR write, settings write, cleanup/download, or second model |
+| `H2 model-comparison plan freeze GO` | Freeze the Primary 4 x 17-case model-comparison plan with `json_object` fixed and conformance tripwire live | plan doc + tracker/AGENTS sync | docs only; no `/explain`, no HP runtime start, no EMR write, no model/matrix/cleanup/download; commit/push separate |
+| `RA-06/RA-07 expected_summary_keywords spot-check GO` | User-owned wording spot-check for the two v0.2 cases before content-quality verdicts | spot-check note / updated provisional labels if needed | no model execution, no `/explain`, no chunk regen, no EMR write |
 | `Phase 2 heavy run GO` | L5 real `/explain` endpoint cells | Phase 2 result packet | requires separate explicit GO, RA-03 checks, and EMR read-only constraints |
 | `Phase 2 ladder tracker commit + push GO` | Commit tracker changes | git commit/push | docs only unless explicitly broadened |
 
@@ -441,6 +443,40 @@ Append new result entries below. Keep old entries intact.
 - Next GO: `H2 A/B execution plan review GO`, then commit/push + HP
   pull/verify, then `H2 A/B execution GO (4-cell minimal)`.
 
+### H2 model-comparison plan freeze
+
+- Status: frozen-plan-pending-review-commit-push-hp-pull
+- GO issued: `H2 model-comparison plan freeze GO`
+- Reported: 2026-05-31
+- Plan doc: `docs/h2-model-comparison-plan-2026-05-31.md`
+- Scope:
+  - Primary 4 only:
+    - `hpz2-l2-qwen36-35b-a3b`
+    - `hpz2-l2-qwen36-35b-a3b-mtp-mxfp4`
+    - `hpz2-l2-qwen36-35b-a3b-mtp-q8`
+    - `hpz2-l2-granite-41-30b-q4km`
+  - Eval set v0.2.1, 17 cases.
+  - RA-04 PHI early-return means 16 model-call cases per model.
+  - Expected model-call cells: 4 x 16 = 64.
+  - Schema mode fixed to `json_object` from R14.
+  - Strict-schema conformance metric remains live as a tripwire.
+  - Model is the only variable; `top_k=5`, `min_similarity=0.45`,
+    `lexical_rerank=false`, prompt/tone unchanged.
+- User-owned carries:
+  - RA-06/RA-07 content-quality verdicts remain provisional until
+    expected-summary keyword spot-check is closed.
+  - RA-06 stays included as a hard-case tripwire for multi-citation behavior and
+    structural/schema conformance.
+- STOP:
+  - This plan freeze does not authorize `/explain`, HP runtime startup, model
+    execution, matrix execution, EMR writes, cleanup, downloads, commit, or push.
+  - Execution still requires explicit `Phase 2 heavy run GO`.
+- Next GO:
+  - `H2 model-comparison plan review GO`
+  - then commit/push + HP pull/verify
+  - optional RA-06/RA-07 keyword spot-check
+  - then `Phase 2 heavy run GO`
+
 ### L5 Ollama-compatible shim adapter
 
 - Status: implemented-reviewed-r12-jsonschema-committed-hp-pulled
@@ -494,10 +530,18 @@ Append new result entries below. Keep old entries intact.
   and explicit execution/result gate.
 - No H2 A/B execution, HP runtime start, or `/explain` call from the R13 plan
   freeze alone.
+- No H2 model-comparison execution, HP runtime start, or `/explain` call from
+  the R15 plan freeze alone; execution still requires explicit
+  `Phase 2 heavy run GO`.
 - No RA-05 final content-quality verdict until user-owned expected-summary and
   clinical-input checks are complete; RA-05 is structure/schema-enforcement
   evidence only in the frozen A/B plan.
+- No RA-06/RA-07 final content-quality verdict until user-owned
+  expected-summary keyword spot-check is complete; if run earlier, content
+  lanes must be labeled provisional.
 - No Granite / 8-cell H2 A/B expansion without separate explicit approval.
+- No H2 reference/historical model expansion without separate review and
+  explicit user GO.
 - No EMR_AI_24clinic write without explicit GO.
 - No RA-03 changes or inferred replacement values without explicit user instruction.
 - No Stage B/C expansion without explicit GO.
@@ -530,3 +574,5 @@ Append new result entries below. Keep old entries intact.
 | R12-correction | 2026-05-30 | Corrected the initial flat `json_schema` draft to the R11-verified nested OpenAI-style wrapper after HP shape comparison reported MISMATCH. |
 | R12-closeout | 2026-05-30 | Recorded R12 commit/push/HP pull completion at `dd646db`; nested `json_schema` mode is available but still requires a fixed H2 mode decision before broader comparisons. |
 | R13 | 2026-05-30 | Froze H2 schema-mode A/B execution plan: RA-03 + RA-05 crossed with `json_object` + `json_schema` on Qwen 35B A3B official, with RA-05 limited to structure/schema-enforcement measurement and Granite expansion requiring separate approval. |
+| R14 | 2026-05-31 | Recorded H2 schema-mode A/B 8-cell result: Qwen 35B A3B official + Granite 4.1 30B across `json_object`/`json_schema`, 8/8 PASS, no structural drift, PHI 0, Rule 2 -> H2 schema mode fixed to `json_object` plus strict-schema conformance metric/caveat. |
+| R15 | 2026-05-31 | Froze H2 model-comparison plan: Primary 4 x 17-case eval set, `json_object` fixed, strict-schema conformance metric live, 64 expected model-call cells, RA-06/RA-07 content verdicts provisional until user spot-check, execution still gated by `Phase 2 heavy run GO`. |

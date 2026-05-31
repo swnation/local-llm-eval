@@ -59,9 +59,9 @@ Rules:
 | Field | Value |
 |---|---|
 | Current level | L0/L1 complete / llama.cpp primary lane locked / L2 full matrix / shortlist locked / L5 shim implemented / Step 3 + shutdown / shim review PASS / H1 RA-03 PASS / schema probe PASS / json_schema mode committed / H2 A/B plan frozen / **H2 A/B 8-cell executed (8/8 PASS, no structural drift)** / **schema mode decided = json_object (Rule 2)** |
-| Current repo HEAD | `08a94af` (`docs(rag): freeze H2 schema mode A/B plan`) committed+pushed+HP-pulled; **H2 A/B result-sync (R14) doc changes are working tree** until separate commit/push GO |
+| Current repo HEAD | `78bfcd1` (`docs(rag): promote eval_set v0.2 RA-06/RA-07`) committed+pushed; R14 H2 A/B result-sync is already committed+pushed at `f0e4671` and HP-pulled |
 | Current tracker status | H2 A/B 8-cell complete (Qwen 35B A3B official + Granite 4.1 30B x `json_object` + `json_schema`); **Rule 2 -> H2 = `json_object` + strict-schema conformance metric/caveat**; discrimination null (RA-05 did not drift in either mode -> json_schema enforcement undemonstrated, not disproven); HP runtime shut down; broader L5 still blocked |
-| Next recommended GO | this H2 result-sync `commit + push GO` + HP pull, then **H2 model-comparison planning** (`json_object` fixed, strict-schema conformance metric live as a tripwire) |
+| Next recommended GO | HP `local-llm-eval` pull/verify to `78bfcd1` if not already done after eval_set v0.2, then **H2 model-comparison planning** (`json_object` fixed, strict-schema conformance metric live as a tripwire); publish this tracker self-ref fix only with separate commit/push GO |
 | L2 blocker | none for synthetic L2 evidence; current primary shortlist is locked |
 | L3 blocker | user GO + runner-side normalizer feasibility prototype over locked primary shortlist |
 | L5 hard blocker | H1 PASS + shutdown + schema probe + R12 + R13 plan + H2 A/B 8-cell + schema mode decided (`json_object`) do not authorize broader L5; remaining blockers are RA-03 user-owned final checks, sufficient L2-L4 evidence, and explicit `Phase 2 heavy run GO` |

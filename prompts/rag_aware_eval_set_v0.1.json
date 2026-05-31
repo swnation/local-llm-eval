@@ -1,7 +1,7 @@
 {
   "version": "0.1",
-  "status": "R2 pre-L2 policy update (2026-05-25). R1 frozen baseline retained; RA-03 resolved values unchanged as sme + trimesy + lacto2, dx=a090, pediatric age=1. Added semantic-first 4-lane carry, P7 placeholder rejection, acceptable citation policy, and BST/dige citation overrides for L2 runner design. Remaining user-owned placeholders = RA-01/RA-02/RA-05 expected_summary_keywords + user_verdict_carry Phase 2 spot check + RA-01/02/05 clinical input 정합 사용자 검토. 본 baseline = heavy run / model execution / explain call / EMR_AI_24clinic write / commit·push 모두 0 carry.",
-  "description": "RAG-aware evaluation set for EMR_AI_24clinic /explain endpoint. 15 cases = 10 Phase 1c smoke carry + 5 RAG-aware new (RA-01~05). Targets 7 axes (citation 3-way split / context_only / safety_wording / PHI 0 / latency / retrieval_relevance / user_judgement_alignment) per R1 frozen design.",
+  "status": "R2 pre-L2 policy update (2026-05-25). R1 frozen baseline retained; RA-03 resolved values unchanged as sme + trimesy + lacto2, dx=a090, pediatric age=1. Added semantic-first 4-lane carry, P7 placeholder rejection, acceptable citation policy, and BST/dige citation overrides for L2 runner design. Remaining user-owned placeholders = RA-01/RA-02/RA-05 expected_summary_keywords + user_verdict_carry Phase 2 spot check + RA-01/02/05 clinical input 정합 사용자 검토. 본 baseline = heavy run / model execution / explain call / EMR_AI_24clinic write / commit·push 모두 0 carry. v0.2(2026-05-31, Claude override): RA-06(dexisy)·RA-07(umk) cases 추가(임상입력 user-supplied 2026-05-31); RA-08(cetisy)은 식약처/병원 이중기준+needs_review+index 미반영(user 결정)로 제거. keywords = user-input 기반 draft(최종 spot-check 대기). retrieval reachability 미검증. commit/push 0 carry 유지.",
+  "description": "RAG-aware evaluation set for EMR_AI_24clinic /explain endpoint. 17 cases = 10 Phase 1c smoke carry + 5 RAG-aware new (RA-01~05) + 2 v0.2 promote (RA-06~07; RA-08 cetisy 검토 후 제거). Targets 7 axes (citation 3-way split / context_only / safety_wording / PHI 0 / latency / retrieval_relevance / user_judgement_alignment) per R1 frozen design.",
   "design_doc_ref": "../docs/rag_aware_eval_design_r0.md (Phase 2.1 R2 pre-L2 update, 2026-05-25)",
   "design_doc_version": "Phase 2.1 R2 pre-L2 update",
   "shared_sop_version": "AI Project Operating Rules v0.1 R4 (commit f1c471d)",
@@ -97,7 +97,7 @@
       "id": "4",
       "name": "PHI_zero_hit",
       "automation": "auto",
-      "denominator_rule": "all 15 cases (input + output + log scan)",
+      "denominator_rule": "all 17 cases (input + output + log scan)",
       "target": "0 hit",
       "hard_fail_gate": true,
       "phase1c_baseline": "0 hit (smoke + LLM 출력 + log 모두)",
@@ -192,12 +192,12 @@
     "C7_metric_risk_review": ["metric_risk_notes"]
   },
   "denominator_summary": {
-    "axis_1a_1b_1c": "model_call_expected=true AND expected_status=='ok' = 14 cases (RA-04 제외)",
+    "axis_1a_1b_1c": "model_call_expected=true AND expected_status=='ok' = 16 cases (RA-04 제외; v0.2 RA-06~07 포함)",
     "axis_2": "manual sample, denominator manual reviewer 판단",
     "axis_3": "manual sample, denominator manual reviewer 판단",
-    "axis_4": "all 15 cases (HARD FAIL gate)",
+    "axis_4": "all 17 cases (HARD FAIL gate)",
     "axis_5a": "1 per cell (cold start)",
-    "axis_5b_5c": "model_call_expected=true = 14 cases (RA-04 의 PHI early-return 은 LLM 호출 자체 X, warm 분포에 영향 X)",
+    "axis_5b_5c": "model_call_expected=true = 16 cases (RA-04 의 PHI early-return 은 LLM 호출 자체 X, warm 분포에 영향 X)",
     "axis_6": "manual sample, denominator manual reviewer 판단",
     "axis_7": "manual sample, denominator manual reviewer 판단"
   },
@@ -536,6 +536,75 @@
       "expected_summary_must_preserve_both": "rule strict 측 제한 핵심 + kb 측 재량/세부 기준 (만 13세 통상 / 만 10~13세 재량 / 만 10세 미만 제한 경계값 중 1개 이상)",
       "user_verdict_carry": "TBD (Phase 2 spot check 후 채움)",
       "_design_note": "Phase 1c handoff §3.3 system_prompt 안 'rule/deterministic source 와 kb nuance/exception 이 함께 retrieved 되면, rule 의 제한·경고 핵심은 유지하되 kb 에 명시된 예외·재량·세부 기준을 함께 반영한다' wording 의 실제 LLM 출력 검증. 만 11세 = 10~13세 재량 영역 = rule strict (만 12세 미만 제한) + kb 재량 둘 다 보존 필요."
+    },
+    {
+      "id": "RA-06-dexisy-pediatric-nsaid-insurance",
+      "source": "Phase 2 v0.2 promote (pediatric NSAID dosing + insurance 상병 nuance; drug-kb pairing scout 2026-05-31)",
+      "expected_status": "ok",
+      "citation_required": true,
+      "model_call_expected": true,
+      "phi_input_test_flag": false,
+      "axis_focus": ["1a", "1b", "2", "3", "6"],
+      "explain_request": {
+        "check_result": {
+          "level": "warn",
+          "message": "소아 NSAID(dexisy) 처방 — BW 용량 확인 및 단순 위장관 상병 단독 삭감 위험 검토",
+          "sub": "dexisy(코코페디, dexibuprofen) 소아 처방; a090 단독 시 NSAID 보험 보호상병 필요 여부",
+          "source": "rule_pediatric_nsaid_dose_insurance"
+        },
+        "context": {
+          "dx": ["a090"],
+          "orders": ["dexisy", "typow", "trimesy", "lacto2", "sme"],
+          "order_details": [
+            { "code": "dexisy", "dose": "6.5mL TID", "days": 3, "_note": "15kg; BW 범위 최소값 정렬(12-15.9kg 5~9mL 중 하한), 총 19.5mL/day" },
+            { "code": "typow", "dose": "AAP 가루약 TID", "days": 3, "_note": "kg 근사, 총 1.5g/day; dexisy와 교차복용" },
+            { "code": "trimesy", "dose": "5mL TID", "days": 3 },
+            { "code": "lacto2", "dose": "0.5g TID", "days": 3 },
+            { "code": "sme", "dose": "8mL TID", "days": 3, "_note": "kg의 ~1.5배 초과 하루총량, 총 24mL/day" }
+          ],
+          "patient_type": "소아",
+          "age": 3
+        },
+        "weight_kg": 15,
+        "options": { "top_k": 5, "min_similarity": 0.45, "lexical_rerank": false }
+      },
+      "expected_citations_includes_at_least": ["rule:drug:dexisy", "kb:소아_dexisy_BW_용량", "kb:소아_NSAIDs_추가_상병"],
+      "expected_summary_keywords": ["dexisy", "체중", "NSAID", "a090", "삭감", "보호상병", "r5099", "진료의 판단"],
+      "user_verdict_carry": "TBD (clinical input = user-supplied 2026-05-31; expected_summary_keywords = user-input 기반 draft, 확정 spot-check 대기)",
+      "_clinical_input_note": "User-supplied 2026-05-31: 3세 15kg AGE(38도 발열·복통·구토·설사, 장음↑·LLQ 압통 약간·반발통 X). 발열에 AAP(typow)+NSAID(dexisy) 교차복용 + AGE 대증(trimesy/lacto2/sme). dexisy 15kg→1회 6.5mL TID(범위 최소값). NSAID는 AGE 상병 a090/a084-1 단독이면 삭감 → 보호상병 추가; 어린 아이는 근육통/두통 표현 어려워 r5099(불명열 NOS) 우선.",
+      "_design_note": "RA-05식 multi-citation(rule + dosing kb + insurance 상병 kb). H2 discrimination-null 후속 hard-case 1순위. dx=a090 단독(삭감 위험 상태) → /explain이 보호상병(r5099) 권고 + dexisy 체중기준 용량을 설명하는지. expected_citations 존재 검증 완료, retrieval reachability 미검증.",
+      "_v0.2_user_review_needed": "expected_summary_keywords 최종 확정(현재 user-input 기반 draft) + 기대 안전 wording(단정 X, 처방 결정 진료의 판단)."
+    },
+    {
+      "id": "RA-07-umk-uri-syrup-age-insurance",
+      "source": "Phase 2 v0.2 promote (URI 시럽 연령·고정용량 보험 제한; drug-kb pairing scout 2026-05-31)",
+      "expected_status": "ok",
+      "citation_required": true,
+      "model_call_expected": true,
+      "phi_input_test_flag": false,
+      "axis_focus": ["1a", "1b", "2", "6"],
+      "explain_request": {
+        "check_result": {
+          "level": "warn",
+          "message": "움카민(umk) URI 시럽 — 만 12세 미만 보험 및 나이별 고정용량 이탈 삭감 검토",
+          "sub": "umk(펠리움/움카민) 처방; 연령·고정용량 보험 제한",
+          "source": "rule_uri_syrup_age_insurance"
+        },
+        "context": {
+          "dx": ["j209"],
+          "orders": ["umk"],
+          "order_details": [{ "code": "umk", "dose": "3mL TID", "days": 5, "_note": "4세=1~6세 band → 1회 3mL TID, 총 9mL/day. **연령 기준 고정용량**(체중 기준 아님)." }],
+          "patient_type": "소아",
+          "age": 4
+        },
+        "options": { "top_k": 5, "min_similarity": 0.45, "lexical_rerank": false }
+      },
+      "expected_citations_includes_at_least": ["rule:drug:umk", "kb:성인_URI_시럽_라인업", "kb:소아_URI(만12세_미만):007"],
+      "expected_summary_keywords": ["umk", "연령 기준", "3mL", "12세 미만", "보험", "급성 기관지염", "j209"],
+      "user_verdict_carry": "TBD (clinical input = user-supplied 2026-05-31; keywords = draft, spot-check 대기)",
+      "_clinical_input_note": "User-supplied 2026-05-31: umk(움카민/pelargonium) 연령별 고정용량 — 12세+ 9mL TID / 6~12세 6mL TID / 1~6세 3mL TID. 4세=3mL TID(총 9). 12세 이상은 이런 시럽 보험 X. 허가 효능 = 급성 기관지염뿐 → dx j209 고정. **핵심 오류 케이스: umk를 체중 기준(dropsy식)으로 잘못 dosing하면 틀림 → 연령 기준임을 잡아내야.**",
+      "_design_note": "URI 시럽 연령·보험 제한 + 연령-vs-체중 dosing 구분 테스트. smoke-05(성인 URI)와 다른 소아·시럽 각도. source_id 존재 검증 완료, retrieval reachability 미검증.",
+      "_v0.2_user_review_needed": "expected_summary_keywords 최종 확정(현재 draft)."
     }
   ],
   "open_ambiguities_blocking_freeze": [
@@ -581,6 +650,15 @@
         "owner": "user",
         "action_required": "read-only source_id existence verified against current RAG chunks on 2026-05-24",
         "blocking_heavy_run": false
+      },
+      {
+        "id": "RA-06-07-v0.2-promoted",
+        "scope": "RA-06(dexisy) / RA-07(umk) expected_summary_keywords 최종 확정 + retrieval reachability",
+        "current_state": "임상입력 user-supplied 2026-05-31(RA-06 3세 15kg AGE NSAID / RA-07 4세 umk); expected_summary_keywords = user-input 기반 draft(array); expected_citations = in-index 검증",
+        "owner": "user",
+        "action_required": "(1) expected_summary_keywords 최종 확정/trim (2) retrieval reachability 확인 (top_k=5/min_sim=0.45 에서 expected_citations 실제 retrieve 되는지)",
+        "blocking_heavy_run": false,
+        "_note": "v0.2 promote (2026-05-31, Claude override). axis 1/4/5 자동 측정 가능. RA-08(cetisy)은 식약처/병원 이중기준+needs_review+index 미반영(user 결정)로 v0.2 제거; cetisy 용량 정본화+index화 시 재검토(chunk regen=HOLD)."
       }
     ],
     "_synthetic_phi_external_sharing_carry": "RA-04 의 synthetic_phi_fixture=true 영역 = 외부 reviewer 발송 / 외부 service 전송 시 redact 필수 (request_field_notes._external_sharing_note 참조). 본 R1 frozen 시점에서도 동일 carry."
@@ -588,7 +666,7 @@
   "freeze_conditions": [
     "RA-03 input / expected citations resolved; RA-01 / RA-02 / RA-05 remaining spot-check placeholders are non-blocking for axis 1/4/5 heavy run",
     "사용자 또는 Codex cross-review verdict = GO for freeze",
-    "model_call_expected=true 인 14 case 의 expected_citations_includes_at_least 가 retrieved chunk 정본 (../../EMR_AI_24clinic/rag_index/_build/) 안에 존재함을 read-only verify"
+    "model_call_expected=true 인 16 case 의 expected_citations_includes_at_least 가 retrieved chunk 정본 (../../EMR_AI_24clinic/rag_index/_build/) 안에 존재함을 read-only verify"
   ],
   "stop_carry": [
     "heavy run X (L2/L3/L4/L5 각각 별도 GO 전 절대 금지; real /explain은 explicit Phase 2 heavy run GO 전 금지)",
@@ -626,6 +704,16 @@
       "version": "R2 pre-L2 policy update",
       "date": "2026-05-25",
       "change": "semantic-first 4-lane metadata, P7 placeholder rejection, acceptable citation policy, C1-C7 metric hooks 추가. smoke-01 dige exact source IDs + invalid alias policy 명시. smoke-09 BST는 acceptable_citation_set 신규 도입: core_any_of=[rule:module:bst, kb:BST_시나리오], strong_all=[rule:module:bst, kb:BST_시나리오], optional_hits=[kb:bst_vs_glu, dict:bst]. RA-03 resolved values unchanged. heavy run X / model execution X / explain call X / EMR_AI_24clinic write X / commit X / push X carry 유지."
+    },
+    {
+      "version": "v0.2 draft-promoted (RA-06~08)",
+      "date": "2026-05-31",
+      "change": "eval_set v0.2 promote GO (Claude override, Codex 토큰 부재). drug-kb pairing scout 후보 3건을 cases 배열에 promote: RA-06-dexisy-pediatric-nsaid-insurance (rule:drug:dexisy + kb:소아_dexisy_BW_용량 + kb:소아_NSAIDs_추가_상병; RA-05식 다인용 hard-case; H2 discrimination-null 후속), RA-07-umk-uri-syrup-age-insurance (rule:drug:umk + kb:성인_URI_시럽_라인업 + kb:소아_URI(만12세_미만):007), RA-08-cetisy-pediatric-antihistamine-dose (rule:drug:cetisy + kb:항히스타민제_정리:006; 신규 항히스타민 테마; rule needs_review 용량 미확정). expected_citations source_id = rag_index/chunks read-only 존재 검증(2026-05-31); retrieval reachability 미검증. expected_summary_keywords = {TBD-by-user-spot-check}; check_result framing·dx/orders·age = Claude draft 사용자 정합 review 대기 (RA-01/02/05과 동일 상태). description 15→18, denominator 14→17 갱신, remaining_user_owned_placeholders 에 RA-06~08 항목 추가. frozen v0.1 구조 append-only 보존. 별도 draft 파일 rag_aware_eval_set_v0.2_draft.json 은 promote 후 제거(SSOT 단일화). heavy run X / model execution X / EMR write X / commit X / push X carry 유지."
+    },
+    {
+      "version": "v0.2.1 clinical-input + RA-08 removal",
+      "date": "2026-05-31",
+      "change": "User clinical review (2026-05-31) 반영. RA-06(dexisy): 3세 15kg AGE 발열 bundle(dexisy 6.5mL TID·typow AAP·trimesy·lacto2·sme), dx a090 단독(삭감 위험 상태), weight_kg 15, NSAID 보호상병 = 어린 아이는 근육통/두통 표현 어려워 r5099(불명열 NOS) 우선; expected_summary_keywords draft array 채움. RA-07(umk): 4세 3mL TID(1~6세 band, 연령 기준), j209 고정(허가 효능=급성 기관지염뿐), umk를 체중(dropsy식)으로 잘못 dosing하면 틀림=연령 기준 잡기 포인트; keywords draft. RA-08(cetisy) 제거: 식약처(연령 2.5mL 1일2회 등) vs 병원(체중 ~6mL@15kg) 이중기준 + rule needs_review + 사용자 'RAG index 미반영' 결정 → 깨끗한 eval 케이스 불가. cetisy 정식 용량은 식약처 기본 + 병원처럼 체중 가변 허용이나, index화(=chunk regen=HOLD) 보류로 v0.2 제외; 추후 정본화+index 시 재검토. cases 18→17, description/denominator(16/17/16) 갱신. keywords = user-input 기반 draft(최종 spot-check 대기), retrieval reachability 미검증. heavy run X / model execution X / EMR write X / commit X / push X carry 유지."
     }
   ]
 }

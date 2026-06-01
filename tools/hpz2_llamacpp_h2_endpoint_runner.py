@@ -33,9 +33,21 @@ PRIMARY_MODELS = [
     "hpz2-l2-qwen36-35b-a3b-mtp-q8",
     "hpz2-l2-granite-41-30b-q4km",
 ]
+C1_REPLAY_PILOT_MODELS = [
+    "hpz2-l2-qwen36-35b-a3b",
+    "hpz2-l2-granite-41-30b-q4km",
+]
+C1_REPLAY_CASE_IDS = [
+    "smoke-09-bst",
+    "RA-03-safety-boundary",
+    "RA-06-dexisy-pediatric-nsaid-insurance",
+    "RA-07-umk-uri-syrup-age-insurance",
+]
 APPROVED_RUNNER_WORKTREE_PATHS = {
     "tools/hpz2_llamacpp_h2_endpoint_runner.py",
     "docs/hpz2-llamacpp-h2-endpoint-runner-2026-06-01.md",
+    "docs/h2-output-contract-primary4-expansion-review-2026-06-02.md",
+    "docs/h2-c1-endpoint-hypothesis-replay-design-2026-06-02.md",
 }
 
 
@@ -108,6 +120,10 @@ def ps_array(values: list[Any]) -> str:
     return "@(" + ",".join(ps_quote(value) for value in values) + ")"
 
 
+def safe_slug(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("._") or "item"
+
+
 def tail_file(path: Path, max_chars: int = 2000) -> str:
     if not path.exists():
         return ""
@@ -170,6 +186,27 @@ def local_harness_dependency_preflight() -> dict[str, Any]:
 
 def config_model_map(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(model["label"]): model for model in config["models"]}
+
+
+def select_model_labels(*, c1_replay: bool, primary4_c1_replay: bool) -> list[str]:
+    if not c1_replay:
+        return list(PRIMARY_MODELS)
+    return list(PRIMARY_MODELS if primary4_c1_replay else C1_REPLAY_PILOT_MODELS)
+
+
+def select_cases(eval_set: dict[str, Any], *, c1_replay: bool) -> list[dict[str, Any]]:
+    cases = list(eval_set["cases"])
+    if not c1_replay:
+        return cases
+    by_id = {str(case.get("id", "")): case for case in cases}
+    missing = [case_id for case_id in C1_REPLAY_CASE_IDS if case_id not in by_id]
+    if missing:
+        raise RuntimeError(f"missing C1 replay cases: {missing}")
+    selected = [by_id[case_id] for case_id in C1_REPLAY_CASE_IDS]
+    non_model = [str(case.get("id", "")) for case in selected if not bool(case.get("model_call_expected", True))]
+    if non_model:
+        raise RuntimeError(f"C1 replay cases must call the model: {non_model}")
+    return selected
 
 
 def build_server_args(config: dict[str, Any], model: dict[str, Any]) -> list[str]:
@@ -482,7 +519,39 @@ def classify_failure(case: dict[str, Any]) -> str:
     return ""
 
 
-def run_harness_for_model(model_label: str, cases: list[dict[str, Any]], eval_set: dict[str, Any]) -> list[dict[str, Any]]:
+def write_replay_response_artifacts(
+    *,
+    model_label: str,
+    case_id: str,
+    body: dict[str, Any],
+    raw_llm_text: str,
+    scan_output,
+) -> tuple[dict[str, str], bool]:
+    paths: dict[str, str] = {}
+    response_dir = RESULT_DIR / "responses" / safe_slug(model_label)
+    response_dir.mkdir(parents=True, exist_ok=True)
+    body_text = json.dumps(body, ensure_ascii=False, indent=2)
+    body_phi_hit, _ = scan_output(body_text)
+    raw_phi_hit = bool(raw_llm_text and scan_output(raw_llm_text)[0])
+    if body_phi_hit or raw_phi_hit:
+        return paths, True
+    endpoint_path = response_dir / f"{safe_slug(case_id)}__endpoint_response.json"
+    endpoint_path.write_text(body_text + "\n", encoding="utf-8", newline="\n")
+    paths["endpoint_response_path"] = str(endpoint_path)
+    if raw_llm_text:
+        raw_path = response_dir / f"{safe_slug(case_id)}__raw_llm_response.txt"
+        raw_path.write_text(raw_llm_text, encoding="utf-8", newline="\n")
+        paths["raw_llm_response_path"] = str(raw_path)
+    return paths, False
+
+
+def run_harness_for_model(
+    model_label: str,
+    cases: list[dict[str, Any]],
+    eval_set: dict[str, Any],
+    *,
+    store_replay_responses: bool = False,
+) -> list[dict[str, Any]]:
     os.environ.update(
         {
             "PYTHONDONTWRITEBYTECODE": "1",
@@ -514,12 +583,14 @@ def run_harness_for_model(model_label: str, cases: list[dict[str, Any]], eval_se
 
     def wrapped_generate(*, prompt: str, system: str = "", settings=None, **kwargs: Any) -> dict[str, Any]:
         result = original_generate(prompt=prompt, system=system, settings=settings, **kwargs)
-        meta = schema_meta(str(result.get("text", ""))) if result.get("status") == "ok" else schema_meta("")
+        raw_text = str(result.get("text", "")) if result.get("status") == "ok" else ""
+        meta = schema_meta(raw_text) if result.get("status") == "ok" else schema_meta("")
         meta.update(
             {
                 "status": result.get("status"),
                 "latency_ms": result.get("latency_ms"),
                 "error_message_present": bool(result.get("error_message")),
+                "_raw_llm_text_for_storage": raw_text,
             }
         )
         traces.append(meta)
@@ -552,6 +623,17 @@ def run_harness_for_model(model_label: str, cases: list[dict[str, Any]], eval_se
         citation_issues = returned_citation_issues(body) if isinstance(body, dict) else ["<invalid-response>"]
         expected_missing = expected_citations_missing(body, expected) if isinstance(body, dict) else expected
         phi_hit = output_phi_hit(body, scan_output) if isinstance(body, dict) else True
+        response_paths: dict[str, str] = {}
+        raw_storage_phi_hit = False
+        if store_replay_responses and isinstance(body, dict):
+            response_paths, raw_storage_phi_hit = write_replay_response_artifacts(
+                model_label=model_label,
+                case_id=case_id,
+                body=body,
+                raw_llm_text=str(trace.get("_raw_llm_text_for_storage", "")) if llm_called else "",
+                scan_output=scan_output,
+            )
+            phi_hit = phi_hit or raw_storage_phi_hit
         returned_source_ids = [
             str(citation.get("source_id", "")).strip()
             for citation in body.get("citations", []) or []
@@ -584,6 +666,13 @@ def run_harness_for_model(model_label: str, cases: list[dict[str, Any]], eval_se
             "citation_issues": citation_issues,
             "expected_citations_missing": expected_missing,
             "phi_hit_count": 1 if phi_hit else 0,
+            "response_artifacts": response_paths,
+            "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
+            "manual_review_needed": store_replay_responses and llm_called,
+            "semantic_pass": None if store_replay_responses and llm_called else None,
+            "grounding_pass": None if store_replay_responses and llm_called else None,
+            "citation_claim_pass": None if store_replay_responses and llm_called else None,
+            "safety_pass": None if store_replay_responses and llm_called else None,
         }
         row.update(content_lane_meta(case, trace, llm_called=llm_called))
         row["failure_owner"] = classify_failure(row)
@@ -596,17 +685,26 @@ def run_harness_for_model(model_label: str, cases: list[dict[str, Any]], eval_se
 
 
 def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
-    json_path = RESULT_DIR / "h2_model_comparison_results.json"
-    md_path = RESULT_DIR / "h2_model_comparison_summary.md"
+    if payload.get("run_mode") == "c1_endpoint_replay":
+        json_path = RESULT_DIR / "h2_c1_endpoint_replay_results.json"
+        md_path = RESULT_DIR / "h2_c1_endpoint_replay_summary.md"
+        title = "H2 C1 Endpoint Replay"
+        raw_line = "- raw endpoint responses: stored for selected synthetic replay cells after PHI scan\n\n"
+    else:
+        json_path = RESULT_DIR / "h2_model_comparison_results.json"
+        md_path = RESULT_DIR / "h2_model_comparison_summary.md"
+        title = "H2 Model Comparison Endpoint Run"
+        raw_line = "- raw model responses: not stored\n\n"
     with json_path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     with md_path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("# H2 Model Comparison Endpoint Run\n\n")
+        handle.write(f"# {title}\n\n")
         handle.write(f"- generated_at: `{payload['generated_at']}`\n")
+        handle.write(f"- run_mode: `{payload.get('run_mode')}`\n")
         handle.write(f"- stopped_early: `{payload['stopped_early']}`\n")
         handle.write(f"- stop_reason: `{payload.get('stop_reason') or ''}`\n")
-        handle.write("- raw model responses: not stored\n\n")
+        handle.write(raw_line)
         handle.write("| model | cases | http 200 | ok | valid json | strict schema | structural drift | citation issue | content pass | content missing | content not scored | phi hits | unexpected calls |\n")
         handle.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
         for model in payload["models"]:
@@ -649,16 +747,36 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--confirm-phase2-heavy-run", action="store_true")
     parser.add_argument("--confirm-h2-content-lane-supplement", action="store_true")
+    parser.add_argument("--confirm-h2-c1-endpoint-replay", action="store_true")
+    parser.add_argument("--primary4-c1-replay", action="store_true")
     parser.add_argument("--allow-approved-runner-worktree", action="store_true")
     parser.add_argument("--output-dir", default="")
     args = parser.parse_args()
-    if not (args.confirm_phase2_heavy_run or args.confirm_h2_content_lane_supplement):
+    if not (
+        args.confirm_phase2_heavy_run
+        or args.confirm_h2_content_lane_supplement
+        or args.confirm_h2_c1_endpoint_replay
+    ):
         print("Refusing without an explicit H2 execution confirmation flag", file=sys.stderr)
         return 2
+    if args.primary4_c1_replay and not args.confirm_h2_c1_endpoint_replay:
+        raise RuntimeError("--primary4-c1-replay requires --confirm-h2-c1-endpoint-replay")
+
+    if args.confirm_h2_c1_endpoint_replay and args.confirm_phase2_heavy_run:
+        raise RuntimeError("C1 endpoint replay must not be combined with phase2 heavy run")
+
+    if args.confirm_h2_c1_endpoint_replay and args.confirm_h2_content_lane_supplement:
+        raise RuntimeError("C1 endpoint replay must not be combined with content-lane supplement")
+
     if args.output_dir:
         RESULT_DIR = resolve_output_dir(args.output_dir)
     else:
-        prefix = "h2_content_lane_supplement" if args.confirm_h2_content_lane_supplement else "h2_model_comparison"
+        if args.confirm_h2_c1_endpoint_replay:
+            prefix = "h2_c1_endpoint_replay"
+        elif args.confirm_h2_content_lane_supplement:
+            prefix = "h2_content_lane_supplement"
+        else:
+            prefix = "h2_model_comparison"
         RESULT_DIR = DEFAULT_OUTPUT_ROOT / f"{prefix}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     RESULT_DIR.mkdir(parents=True, exist_ok=False)
     LOCK_PATH = RESULT_DIR / "run.lock"
@@ -667,8 +785,12 @@ def main() -> int:
     config = load_json(CONFIG_PATH)
     eval_set = load_json(EVAL_SET_PATH)
     models_by_label = config_model_map(config)
-    models = [models_by_label[label] for label in PRIMARY_MODELS]
-    cases = list(eval_set["cases"])
+    model_labels = select_model_labels(
+        c1_replay=args.confirm_h2_c1_endpoint_replay,
+        primary4_c1_replay=args.primary4_c1_replay,
+    )
+    models = [models_by_label[label] for label in model_labels]
+    cases = select_cases(eval_set, c1_replay=args.confirm_h2_c1_endpoint_replay)
     approved_dirty_paths = APPROVED_RUNNER_WORKTREE_PATHS if args.allow_approved_runner_worktree else None
     preflight = {
         "main_local_llm_eval": assert_clean_git(
@@ -692,11 +814,27 @@ def main() -> int:
 
     payload: dict[str, Any] = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
-        "scope": "H2 Primary 4 x 17 endpoint model comparison",
-        "run_mode": "content_lane_supplement" if args.confirm_h2_content_lane_supplement else "phase2_heavy_run",
+        "scope": (
+            "H2 C1 endpoint-hypothesis replay"
+            if args.confirm_h2_c1_endpoint_replay
+            else "H2 Primary 4 x 17 endpoint model comparison"
+        ),
+        "run_mode": (
+            "c1_endpoint_replay"
+            if args.confirm_h2_c1_endpoint_replay
+            else "content_lane_supplement"
+            if args.confirm_h2_content_lane_supplement
+            else "phase2_heavy_run"
+        ),
         "schema_mode": "json_object",
-        "content_lane_method": "expected_summary_keywords substring check; raw summaries parsed transiently and not written",
-        "raw_model_responses_stored": False,
+        "content_lane_method": (
+            "manual-review-first C1 replay; keyword hits retained as supporting metadata"
+            if args.confirm_h2_c1_endpoint_replay
+            else "expected_summary_keywords substring check; raw summaries parsed transiently and not written"
+        ),
+        "raw_model_responses_stored": bool(args.confirm_h2_c1_endpoint_replay),
+        "selected_models": model_labels,
+        "selected_cases": [str(case.get("id", "")) for case in cases],
         "preflight": preflight,
         "models": [],
         "stopped_early": False,
@@ -726,7 +864,12 @@ def main() -> int:
             remote_wait_health(18081, shim_proc, shim, timeout_sec=60)
             tunnel = start_tunnel()
             wait_url("http://127.0.0.1:18081/health", tunnel, timeout_sec=30)
-            model_row["cases"] = run_harness_for_model(label, cases, eval_set)
+            model_row["cases"] = run_harness_for_model(
+                label,
+                cases,
+                eval_set,
+                store_replay_responses=args.confirm_h2_c1_endpoint_replay,
+            )
             print(f"DONE {label}", flush=True)
         except Exception as exc:
             payload["stopped_early"] = True

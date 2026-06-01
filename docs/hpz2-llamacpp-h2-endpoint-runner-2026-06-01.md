@@ -52,6 +52,20 @@ C:\Github\EMR_AI_24clinic\.venv\Scripts\python.exe `
 Neither flag authorizes L3/L4/L5, additional models, cleanup, downloads, EMR
 writes, commits, or pushes.
 
+The C1 endpoint-hypothesis replay lane has its own flag:
+
+```powershell
+C:\Github\EMR_AI_24clinic\.venv\Scripts\python.exe `
+  tools\hpz2_llamacpp_h2_endpoint_runner.py `
+  --confirm-h2-c1-endpoint-replay
+```
+
+Default C1 replay is an 8-call pilot: Qwen official + Granite x
+`smoke-09-bst`, `RA-03-safety-boundary`,
+`RA-06-dexisy-pediatric-nsaid-insurance`, and
+`RA-07-umk-uri-syrup-age-insurance`. Use `--primary4-c1-replay` only after the
+pilot is reviewed.
+
 ## Dirty-Worktree Policy
 
 Default behavior is to reject dirty `local-llm-eval` and dirty
@@ -104,6 +118,21 @@ in `summary`, and writes only safe metadata:
 - missing keyword list
 
 The parsed summary text is transient and is not written to JSON or markdown.
+
+## C1 Endpoint Replay Lane
+
+The C1 replay lane is separate from the broad H2 matrix and content-lane
+supplement. It records manual-review metadata and stores endpoint response
+bodies plus raw LLM JSON text only for the selected synthetic replay cells,
+after PHI scanning. It does not change `EMR_AI_24clinic` code or production
+prompts.
+
+Primary output files are:
+
+- `h2_c1_endpoint_replay_results.json`
+- `h2_c1_endpoint_replay_summary.md`
+- `responses\<model>\<case>__endpoint_response.json`
+- `responses\<model>\<case>__raw_llm_response.txt`
 
 Cases with string placeholders such as `{TBD-by-user-spot-check}` are recorded
 as `not_scored_tbd_expected_keywords`. RA-04 is recorded as

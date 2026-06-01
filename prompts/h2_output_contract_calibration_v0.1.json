@@ -1,0 +1,127 @@
+{
+  "version": "0.1",
+  "status": "Synthetic non-PHI output-contract calibration fixture. This file does not authorize model execution.",
+  "scope": "H2 output-contract calibration over synthetic evidence packs; no /explain, no EMR write, no production patient text.",
+  "contracts": [
+    {
+      "id": "C1",
+      "label": "native_endpoint_contract",
+      "response_format": "json_object",
+      "description": "Strict endpoint-like JSON with bracketed source IDs.",
+      "expected_shape": "{\"summary\":\"한국어 설명\",\"citations\":[\"[source_id]\"]}",
+      "required_keys": ["summary", "citations"],
+      "summary_key": "summary",
+      "citation_key": "citations",
+      "citation_style": "bracketed",
+      "summary_max_chars": 150
+    },
+    {
+      "id": "C2",
+      "label": "json_bare_source_id_contract",
+      "response_format": "json_object",
+      "description": "JSON with endpoint keys but bare source IDs.",
+      "expected_shape": "{\"summary\":\"한국어 설명\",\"citations\":[\"source_id\"]}",
+      "required_keys": ["summary", "citations"],
+      "summary_key": "summary",
+      "citation_key": "citations",
+      "citation_style": "bare",
+      "summary_max_chars": 220
+    },
+    {
+      "id": "C3",
+      "label": "relaxed_json_answer_sources_contract",
+      "response_format": "json_object",
+      "description": "Relaxed JSON using answer/sources keys.",
+      "expected_shape": "{\"answer\":\"한국어 설명\",\"sources\":[\"source_id\"]}",
+      "required_keys": ["answer", "sources"],
+      "summary_key": "answer",
+      "citation_key": "sources",
+      "citation_style": "bare",
+      "summary_max_chars": 220
+    },
+    {
+      "id": "C4",
+      "label": "freeform_inline_citations",
+      "response_format": "none",
+      "description": "Freeform Korean answer with inline bracketed source IDs.",
+      "expected_shape": "한국어 설명 문장. [source_id]",
+      "required_keys": [],
+      "summary_key": null,
+      "citation_key": null,
+      "citation_style": "inline_bracketed",
+      "summary_max_chars": 300
+    }
+  ],
+  "cases": [
+    {
+      "id": "OC-01-simple-one-source",
+      "purpose": "one conclusion, one required source",
+      "task": "DEMO 약제가 원내 제한 대상인지 근거에 따라 간단히 설명하라. 대체 약명은 제안하지 말라.",
+      "evidence": [
+        {
+          "source_id": "rule:drug:demo",
+          "title": "DEMO 원내 제한 규칙",
+          "content": "DEMO는 합성 평가용 약 코드입니다. 근거상 DEMO는 현재 원내 제한 대상으로 표시하며, 처방 변경 또는 대체 약 선택은 진료의 판단 영역입니다."
+        }
+      ],
+      "required_sources": ["rule:drug:demo"],
+      "semantic_must_include": ["DEMO", "원내 제한", "진료의 판단"],
+      "semantic_must_not_include": ["대체 약명", "자동 변경"]
+    },
+    {
+      "id": "OC-02-two-source-nuance",
+      "purpose": "rule plus KB nuance preservation",
+      "task": "소아 DEMO 시럽의 연령 기준과 예외 기준을 근거에 따라 설명하라. 제한 핵심과 예외 기준을 함께 보존하라.",
+      "evidence": [
+        {
+          "source_id": "rule:drug:demo",
+          "title": "DEMO 소아 제한 규칙",
+          "content": "DEMO 시럽은 소아에서 연령 기준 확인이 필요합니다. 만 12세 미만에서는 일괄 허용으로 단정하지 말고 근거 기준을 확인해야 합니다."
+        },
+        {
+          "source_id": "kb:소아_DEMO_용량:007",
+          "title": "DEMO 소아 용량 예외",
+          "content": "합성 KB 기준상 만 6세 이상 11세 이하에서는 1회 3mL, 하루 3회 범위를 검토할 수 있습니다. 이 기준은 체중 기준이 아니라 연령 band 기준입니다."
+        }
+      ],
+      "required_sources": ["rule:drug:demo", "kb:소아_DEMO_용량:007"],
+      "semantic_must_include": ["만 6세", "11세 이하", "3mL", "연령"],
+      "semantic_must_not_include": ["체중 기준", "항상 허용"]
+    },
+    {
+      "id": "OC-03-distractor-source",
+      "purpose": "citation selection under distractor evidence",
+      "task": "DEMO 보험 예외 기준을 설명하라. 관련 없는 일반정보 source는 인용하지 말라.",
+      "evidence": [
+        {
+          "source_id": "rule:drug:demo",
+          "title": "DEMO 보험 확인 규칙",
+          "content": "DEMO 처방 설명에는 보험 예외 여부 확인이 필요합니다. 단순 증상 상병만으로 인정된다고 단정하지 않습니다."
+        },
+        {
+          "source_id": "kb:보험_DEMO_예외_2026-01",
+          "title": "DEMO 보험 예외",
+          "content": "합성 보험 기준상 DEMO는 보호상병 또는 특정 사유가 확인될 때 인정 가능성이 있습니다. 최종 처방과 청구 판단은 진료의와 심사 기준 확인 영역입니다."
+        },
+        {
+          "source_id": "kb:성인_DEMO_일반정보",
+          "title": "DEMO 일반정보",
+          "content": "DEMO는 합성 평가용 일반정보 항목입니다. 이 chunk는 보험 예외 판단 근거로 사용하지 않습니다."
+        }
+      ],
+      "required_sources": ["rule:drug:demo", "kb:보험_DEMO_예외_2026-01"],
+      "distractor_sources": ["kb:성인_DEMO_일반정보"],
+      "semantic_must_include": ["보험", "보호상병", "진료의"],
+      "semantic_must_not_include": ["일반정보 항목"]
+    }
+  ],
+  "positive_example": {
+    "source_id": "rule:drug:example",
+    "summary": "EXAMPLE은 근거상 확인 대상이며 처방 판단은 진료의 영역입니다.",
+    "freeform": "EXAMPLE은 근거상 확인 대상이며 처방 판단은 진료의 영역입니다. [rule:drug:example]"
+  },
+  "negative_example": {
+    "description": "Common invalid endpoint-style output because citation brackets are missing for C1.",
+    "text": "{\"summary\":\"EXAMPLE은 확인 대상입니다.\",\"citations\":[\"rule:drug:example\"]}"
+  }
+}

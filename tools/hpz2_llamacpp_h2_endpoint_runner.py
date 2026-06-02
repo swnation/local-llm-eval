@@ -439,6 +439,7 @@ def schema_meta(text: str) -> dict[str, Any]:
         "strict_schema": False,
         "citation_format_ok": False,
         "raw_citation_count": 0,
+        "raw_citation_source_ids": [],
         "extra_top_level_keys": [],
         "_summary_for_scoring": "",
     }
@@ -455,6 +456,12 @@ def schema_meta(text: str) -> dict[str, Any]:
         meta["_summary_for_scoring"] = parsed["summary"]
     citations = parsed.get("citations")
     meta["raw_citation_count"] = len(citations) if isinstance(citations, list) else 0
+    if isinstance(citations, list):
+        meta["raw_citation_source_ids"] = [
+            strip_source_wrappers(item)
+            for item in citations
+            if strip_source_wrappers(item)
+        ]
     meta["strict_schema"] = (
         keys == {"summary", "citations"}
         and isinstance(parsed.get("summary"), str)
@@ -467,50 +474,390 @@ def schema_meta(text: str) -> dict[str, Any]:
     return meta
 
 
+def strip_source_wrappers(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.startswith("[") and text.endswith("]"):
+        return text[1:-1].strip()
+    return text
+
+
+def clean_source_ids(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    cleaned: list[str] = []
+    for value in values:
+        source_id = strip_source_wrappers(value)
+        if source_id and not source_id.startswith("{TBD") and source_id not in cleaned:
+            cleaned.append(source_id)
+    return cleaned
+
+
+def rubric_text_items(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    items: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            items.append(text)
+    return items
+
+
+def concept_rubric_items(values: Any) -> list[dict[str, Any]]:
+    if not isinstance(values, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for index, value in enumerate(values):
+        if isinstance(value, str):
+            concept_id = value.strip()
+            any_of = [concept_id] if concept_id else []
+        elif isinstance(value, dict):
+            concept_id = str(value.get("id") or f"concept_{index + 1}").strip()
+            any_of = rubric_text_items(value.get("any_of"))
+        else:
+            continue
+        if concept_id and any_of:
+            items.append({"id": concept_id, "any_of": any_of})
+    return items
+
+
+def invalid_rubric_items(rubric: dict[str, Any]) -> list[str]:
+    invalid: list[str] = []
+    if "literal_required" in rubric and not isinstance(rubric.get("literal_required"), list):
+        invalid.append("literal_required")
+    if "concept_required" not in rubric:
+        return invalid
+    values = rubric.get("concept_required")
+    if not isinstance(values, list):
+        invalid.append("concept_required")
+        return invalid
+    for index, value in enumerate(values):
+        if isinstance(value, str):
+            if not value.strip():
+                invalid.append(f"concept_required[{index}]")
+        elif isinstance(value, dict):
+            if not rubric_text_items(value.get("any_of")):
+                concept_id = str(value.get("id") or f"concept_required[{index}]").strip()
+                invalid.append(concept_id or f"concept_required[{index}]")
+        else:
+            invalid.append(f"concept_required[{index}]")
+    return invalid
+
+
+def text_contains_any(summary_text: str, candidates: list[str]) -> bool:
+    folded = summary_text.casefold()
+    return any(candidate.casefold() in folded for candidate in candidates)
+
+
+def content_meta_defaults(
+    *,
+    status: str,
+    content_pass: bool | None,
+    expected_count: int = 0,
+    hit_count: int = 0,
+    missing: list[str] | None = None,
+) -> dict[str, Any]:
+    missing = list(missing or [])
+    return {
+        "content_lane_status": status,
+        "content_lane_pass": content_pass,
+        "content_keywords_expected_count": expected_count,
+        "content_keywords_hit_count": hit_count,
+        "content_keywords_missing": missing,
+        "content_rubric_mode": "legacy_keywords",
+        "content_literal_expected_count": 0,
+        "content_literal_hit_count": 0,
+        "content_literal_missing": [],
+        "content_literal_pass": None,
+        "content_concept_expected_count": 0,
+        "content_concept_hit_count": 0,
+        "content_concept_missing": [],
+        "content_concept_pass": None,
+        "content_rubric_invalid_items": [],
+    }
+
+
 def content_lane_meta(case: dict[str, Any], trace: dict[str, Any], *, llm_called: bool) -> dict[str, Any]:
     if not bool(case.get("model_call_expected", True)):
-        return {
-            "content_lane_status": "not_applicable_early_return",
-            "content_lane_pass": None,
-            "content_keywords_expected_count": 0,
-            "content_keywords_hit_count": 0,
-            "content_keywords_missing": [],
-        }
+        return content_meta_defaults(status="not_applicable_early_return", content_pass=None)
     expected = case.get("expected_summary_keywords")
+    rubric = case.get("expected_summary_rubric")
+    has_rubric = isinstance(rubric, dict)
     if not llm_called:
-        return {
-            "content_lane_status": "not_scored_no_model_call",
-            "content_lane_pass": None,
-            "content_keywords_expected_count": 0,
-            "content_keywords_hit_count": 0,
-            "content_keywords_missing": [],
-        }
-    if not isinstance(expected, list):
-        return {
-            "content_lane_status": "not_scored_tbd_expected_keywords",
-            "content_lane_pass": None,
-            "content_keywords_expected_count": 0,
-            "content_keywords_hit_count": 0,
-            "content_keywords_missing": [],
-        }
-    keywords = [str(item).strip() for item in expected if str(item).strip()]
+        return content_meta_defaults(status="not_scored_no_model_call", content_pass=None)
+    keywords = [str(item).strip() for item in expected if str(item).strip()] if isinstance(expected, list) else []
+    if not isinstance(expected, list) and not has_rubric:
+        return content_meta_defaults(status="not_scored_tbd_expected_keywords", content_pass=None)
     if not trace.get("valid_json") or not isinstance(trace.get("_summary_for_scoring"), str):
-        return {
-            "content_lane_status": "not_scored_invalid_json",
-            "content_lane_pass": None,
-            "content_keywords_expected_count": len(keywords),
-            "content_keywords_hit_count": 0,
-            "content_keywords_missing": keywords,
-        }
+        return content_meta_defaults(
+            status="not_scored_invalid_json",
+            content_pass=None,
+            expected_count=len(keywords),
+            missing=keywords,
+        )
     summary_text = str(trace.get("_summary_for_scoring", "")).casefold()
     missing = [keyword for keyword in keywords if keyword.casefold() not in summary_text]
-    return {
+    meta = {
         "content_lane_status": "pass" if not missing else "missing_keywords",
         "content_lane_pass": not missing,
         "content_keywords_expected_count": len(keywords),
         "content_keywords_hit_count": len(keywords) - len(missing),
         "content_keywords_missing": missing,
     }
+    meta.update(
+        {
+            "content_rubric_mode": "legacy_keywords",
+            "content_literal_expected_count": 0,
+            "content_literal_hit_count": 0,
+            "content_literal_missing": [],
+            "content_literal_pass": None,
+            "content_concept_expected_count": 0,
+            "content_concept_hit_count": 0,
+            "content_concept_missing": [],
+            "content_concept_pass": None,
+            "content_rubric_invalid_items": [],
+        }
+    )
+    if not has_rubric:
+        return meta
+
+    literal_items = rubric_text_items(rubric.get("literal_required"))
+    concept_items = concept_rubric_items(rubric.get("concept_required"))
+    invalid_items = invalid_rubric_items(rubric)
+    if invalid_items:
+        meta.update(
+            {
+                "content_rubric_mode": "keyword_to_concept",
+                "content_lane_status": "not_scored_invalid_rubric",
+                "content_lane_pass": None,
+                "content_rubric_invalid_items": invalid_items,
+            }
+        )
+        return meta
+    if not literal_items and not concept_items:
+        meta.update(
+            {
+                "content_rubric_mode": "keyword_to_concept",
+                "content_lane_status": "not_scored_empty_rubric",
+                "content_lane_pass": None,
+            }
+        )
+        return meta
+    literal_missing = [item for item in literal_items if item.casefold() not in summary_text]
+    concept_missing = [
+        item["id"]
+        for item in concept_items
+        if not text_contains_any(summary_text, item["any_of"])
+    ]
+    literal_pass = not literal_missing if literal_items else None
+    concept_pass = not concept_missing if concept_items else None
+    rubric_pass = (literal_pass is not False) and (concept_pass is not False)
+    meta.update(
+        {
+            "content_rubric_mode": "keyword_to_concept",
+            "content_lane_status": "pass" if rubric_pass else "missing_rubric_items",
+            "content_lane_pass": rubric_pass,
+            "content_literal_expected_count": len(literal_items),
+            "content_literal_hit_count": len(literal_items) - len(literal_missing),
+            "content_literal_missing": literal_missing,
+            "content_literal_pass": literal_pass,
+            "content_concept_expected_count": len(concept_items),
+            "content_concept_hit_count": len(concept_items) - len(concept_missing),
+            "content_concept_missing": concept_missing,
+            "content_concept_pass": concept_pass,
+        }
+    )
+    return meta
+
+
+def citation_policy_for_case(case: dict[str, Any], expected_source_ids: list[str]) -> dict[str, Any]:
+    policy = dict(case.get("acceptable_citation_set") or {})
+    if not policy:
+        policy["required_all"] = list(expected_source_ids)
+    for key in ("required_all", "core_any_of", "strong_all", "optional_hits", "invalid_aliases"):
+        policy[key] = clean_source_ids(policy.get(key))
+    return policy
+
+
+def citation_policy_meta(policy: dict[str, Any], returned_source_ids: list[str]) -> dict[str, Any]:
+    returned = set(returned_source_ids)
+    required_all = clean_source_ids(policy.get("required_all"))
+    core_any_of = clean_source_ids(policy.get("core_any_of"))
+    strong_all = clean_source_ids(policy.get("strong_all"))
+    optional_hits = [source_id for source_id in clean_source_ids(policy.get("optional_hits")) if source_id in returned]
+    invalid_alias_hits = [source_id for source_id in clean_source_ids(policy.get("invalid_aliases")) if source_id in returned]
+    required_all_missing = [source_id for source_id in required_all if source_id not in returned]
+    core_any_of_hits = [source_id for source_id in core_any_of if source_id in returned]
+    core_any_of_missing = list(core_any_of) if core_any_of and not core_any_of_hits else []
+    strong_all_missing = [source_id for source_id in strong_all if source_id not in returned]
+    required_pass = not required_all_missing if required_all else None
+    core_pass = bool(core_any_of_hits) if core_any_of else required_pass
+    strong_pass = not strong_all_missing if strong_all else required_pass
+    has_positive_gate = bool(required_all or core_any_of)
+    if invalid_alias_hits:
+        policy_pass = False
+    elif has_positive_gate:
+        policy_pass = not required_all_missing and not core_any_of_missing
+    else:
+        policy_pass = None
+    return {
+        "required_all": required_all,
+        "required_all_missing": required_all_missing,
+        "required_all_pass": required_pass,
+        "core_any_of": core_any_of,
+        "core_any_of_hits": core_any_of_hits,
+        "core_any_of_missing": core_any_of_missing,
+        "core_any_of_pass": core_pass,
+        "strong_all": strong_all,
+        "strong_all_missing": strong_all_missing,
+        "strong_all_pass": strong_pass,
+        "optional_hits": optional_hits,
+        "invalid_alias_hits": invalid_alias_hits,
+        "policy_pass": policy_pass,
+    }
+
+
+def citation_reachability_meta(
+    case: dict[str, Any],
+    *,
+    expected_source_ids: list[str],
+    retrieved_source_ids: list[str],
+    returned_source_ids: list[str],
+) -> dict[str, Any]:
+    expected = clean_source_ids(expected_source_ids)
+    retrieved = set(retrieved_source_ids)
+    returned = set(returned_source_ids)
+    expected_retrieved = [source_id for source_id in expected if source_id in retrieved]
+    expected_not_retrieved = [source_id for source_id in expected if source_id not in retrieved]
+    expected_retrieved_not_cited = [
+        source_id for source_id in expected_retrieved if source_id not in returned
+    ]
+    expected_satisfied = [source_id for source_id in expected if source_id in returned]
+    policy = citation_policy_for_case(case, expected)
+    policy_result = citation_policy_meta(policy, returned_source_ids)
+    required_all = clean_source_ids(policy_result.get("required_all"))
+    core_any_of = clean_source_ids(policy_result.get("core_any_of"))
+    invalid_aliases = clean_source_ids(policy.get("invalid_aliases"))
+    policy_required_not_retrieved = [source_id for source_id in required_all if source_id not in retrieved]
+    policy_required_retrieved_not_cited = [
+        source_id for source_id in required_all if source_id in retrieved and source_id not in returned
+    ]
+    policy_core_retrieved = [source_id for source_id in core_any_of if source_id in retrieved]
+    policy_core_returned = [source_id for source_id in core_any_of if source_id in returned]
+    policy_core_not_retrieved = list(core_any_of) if core_any_of and not policy_core_retrieved else []
+    policy_core_retrieved_not_cited = (
+        list(policy_core_retrieved) if core_any_of and policy_core_retrieved and not policy_core_returned else []
+    )
+    policy_has_positive_gate = bool(required_all or core_any_of)
+    policy_reachability_pass = (
+        not policy_required_not_retrieved and not policy_core_not_retrieved
+        if policy_has_positive_gate
+        else None
+    )
+    if policy_result.get("invalid_alias_hits"):
+        policy_selection_pass = False
+    elif policy_has_positive_gate:
+        policy_selection_pass = not policy_required_retrieved_not_cited and not policy_core_retrieved_not_cited
+    else:
+        policy_selection_pass = None
+    return {
+        "expected_source_ids": expected,
+        "expected_source_retrieved": expected_retrieved,
+        "expected_source_not_retrieved": expected_not_retrieved,
+        "expected_retrieved_not_cited": expected_retrieved_not_cited,
+        "expected_source_satisfied": expected_satisfied,
+        "expected_source_reachability_pass": not expected_not_retrieved,
+        "citation_selection_pass": not expected_retrieved_not_cited,
+        "citation_policy_reachability_pass": policy_reachability_pass,
+        "citation_policy_selection_pass": policy_selection_pass,
+        "citation_policy_required_not_retrieved": policy_required_not_retrieved,
+        "citation_policy_required_retrieved_not_cited": policy_required_retrieved_not_cited,
+        "citation_policy_core_not_retrieved": policy_core_not_retrieved,
+        "citation_policy_core_retrieved_not_cited": policy_core_retrieved_not_cited,
+        "citation_policy": policy_result,
+    }
+
+
+def source_id_near_misses(raw_source_ids: list[str], retrieved_source_ids: list[str]) -> list[dict[str, str]]:
+    retrieved = set(retrieved_source_ids)
+    near_misses: list[dict[str, str]] = []
+    for raw_source_id in raw_source_ids:
+        if raw_source_id in retrieved:
+            continue
+        underscore_as_colon = raw_source_id.replace("_", ":")
+        if underscore_as_colon in retrieved:
+            near_misses.append(
+                {
+                    "raw": raw_source_id,
+                    "canonical": underscore_as_colon,
+                    "kind": "underscore_to_colon",
+                }
+            )
+    return near_misses
+
+
+def source_id_fidelity_meta(
+    raw_source_ids: list[str],
+    retrieved_source_ids: list[str],
+    *,
+    threshold: float = 0.30,
+) -> dict[str, Any]:
+    retrieved = set(retrieved_source_ids)
+    exact = [source_id for source_id in raw_source_ids if source_id in retrieved]
+    dropped = [source_id for source_id in raw_source_ids if source_id not in retrieved]
+    drop_rate = len(dropped) / max(len(raw_source_ids), 1)
+    if not raw_source_ids:
+        status = "not_scored"
+    elif not dropped:
+        status = "pass"
+    elif drop_rate > threshold:
+        status = "fail"
+    else:
+        status = "warning"
+    return {
+        "raw_citation_source_ids": raw_source_ids,
+        "exact_match_source_ids": exact,
+        "dropped_not_in_retrieved": dropped,
+        "near_miss_mutations": source_id_near_misses(raw_source_ids, retrieved_source_ids),
+        "fidelity_drop_rate": drop_rate,
+        "fidelity_threshold": threshold,
+        "source_id_fidelity_lane_status": status,
+        "source_id_fidelity_exact_pass": not dropped if raw_source_ids else None,
+        "source_id_fidelity_threshold_pass": drop_rate <= threshold if raw_source_ids else None,
+    }
+
+
+def classify_failure_lanes(case: dict[str, Any]) -> list[str]:
+    lanes: list[str] = []
+    if case["phi_hit_count"] > 0:
+        lanes.append("PHI")
+    if case["http_status"] != 200:
+        lanes.append("infra_http")
+    if case["emr_status"] in {"llm_unavailable", "llm_timeout", "llm_model_not_found", "internal_error"}:
+        lanes.append("infra_llm")
+    if case["model_call_expected"] and not case["llm_called"]:
+        lanes.append("retrieval_no_model_call")
+    if case["llm_called"] and (not case.get("valid_json") or not case.get("strict_schema") or case.get("structural_drift")):
+        lanes.append("schema")
+    if case.get("source_id_fidelity", {}).get("source_id_fidelity_lane_status") == "fail":
+        lanes.append("source_id_fidelity")
+    policy_reachability_pass = case.get("citation_policy_reachability_pass")
+    policy_selection_pass = case.get("citation_policy_selection_pass")
+    if policy_reachability_pass is False:
+        lanes.append("retrieval_reachability")
+    elif policy_reachability_pass is None and case.get("expected_source_not_retrieved"):
+        lanes.append("retrieval_reachability")
+    if policy_selection_pass is False:
+        lanes.append("citation_selection")
+    elif policy_selection_pass is None and case.get("expected_retrieved_not_cited"):
+        lanes.append("citation_selection")
+    if case.get("citation_issues"):
+        lanes.append("citation_returned_invalid")
+    if case.get("content_lane_pass") is False:
+        lanes.append("content")
+    if case["emr_status"] != case["expected_status"]:
+        lanes.append("status_mismatch")
+    return lanes
 
 
 def classify_failure(case: dict[str, Any]) -> str:
@@ -524,13 +871,32 @@ def classify_failure(case: dict[str, Any]) -> str:
         return "retrieval"
     if case["llm_called"] and (not case.get("valid_json") or not case.get("strict_schema") or case.get("structural_drift")):
         return "schema"
-    if case.get("citation_issues") or case.get("expected_citations_missing"):
+    lanes = case.get("failure_lanes") or classify_failure_lanes(case)
+    if "retrieval_reachability" in lanes:
+        return "retrieval"
+    if any(owner in lanes for owner in ("source_id_fidelity", "citation_selection", "citation_returned_invalid")):
+        return "citation"
+    policy_pass = case.get("citation_policy", {}).get("policy_pass")
+    if policy_pass is False:
+        return "citation"
+    if case.get("expected_citations_missing") and policy_pass is not True:
         return "citation"
     if case.get("content_lane_pass") is False:
         return "content"
     if case["emr_status"] != case["expected_status"]:
         return "unknown"
     return ""
+
+
+def has_citation_issue(case: dict[str, Any]) -> bool:
+    policy_pass = case.get("citation_policy", {}).get("policy_pass")
+    if case.get("citation_issues"):
+        return True
+    if policy_pass is False:
+        return True
+    if case.get("expected_citations_missing") and policy_pass is not True:
+        return True
+    return False
 
 
 def phi_pattern_hits(text: str, phi_patterns: list[Any]) -> list[str]:
@@ -787,6 +1153,25 @@ def run_harness_for_model(
             for item in body.get("retrieved", []) or []
             if isinstance(item, dict)
         ]
+        raw_citation_source_ids = trace.get("raw_citation_source_ids", []) if llm_called else []
+        source_id_fidelity = source_id_fidelity_meta(raw_citation_source_ids, retrieved_source_ids)
+        reachability = citation_reachability_meta(
+            case,
+            expected_source_ids=expected,
+            retrieved_source_ids=retrieved_source_ids,
+            returned_source_ids=returned_source_ids,
+        )
+        manual_lanes = (
+            {
+                "semantic": "pending",
+                "grounding": "pending",
+                "citation_claim": "pending",
+                "safety": "pending",
+                "note": "",
+            }
+            if store_replay_responses and llm_called
+            else {}
+        )
         row = {
             "case_id": case_id,
             "http_status": response.status_code,
@@ -801,11 +1186,27 @@ def run_harness_for_model(
             "citation_format_ok": trace.get("citation_format_ok") if llm_called else None,
             "structural_drift": (not trace.get("valid_json") or not trace.get("strict_schema") or not trace.get("citation_format_ok")) if llm_called else False,
             "raw_citation_count": trace.get("raw_citation_count") if llm_called else None,
+            "raw_citation_source_ids": raw_citation_source_ids,
             "extra_top_level_keys": trace.get("extra_top_level_keys", []) if llm_called else [],
             "retrieved_count": len(body.get("retrieved", []) or []) if isinstance(body, dict) else 0,
             "citation_count": len(body.get("citations", []) or []) if isinstance(body, dict) else 0,
             "returned_source_ids": returned_source_ids,
             "retrieved_source_ids": retrieved_source_ids,
+            "source_id_fidelity": source_id_fidelity,
+            "expected_source_ids": reachability["expected_source_ids"],
+            "expected_source_retrieved": reachability["expected_source_retrieved"],
+            "expected_source_not_retrieved": reachability["expected_source_not_retrieved"],
+            "expected_retrieved_not_cited": reachability["expected_retrieved_not_cited"],
+            "expected_source_satisfied": reachability["expected_source_satisfied"],
+            "expected_source_reachability_pass": reachability["expected_source_reachability_pass"],
+            "citation_selection_pass": reachability["citation_selection_pass"],
+            "citation_policy_reachability_pass": reachability["citation_policy_reachability_pass"],
+            "citation_policy_selection_pass": reachability["citation_policy_selection_pass"],
+            "citation_policy_required_not_retrieved": reachability["citation_policy_required_not_retrieved"],
+            "citation_policy_required_retrieved_not_cited": reachability["citation_policy_required_retrieved_not_cited"],
+            "citation_policy_core_not_retrieved": reachability["citation_policy_core_not_retrieved"],
+            "citation_policy_core_retrieved_not_cited": reachability["citation_policy_core_retrieved_not_cited"],
+            "citation_policy": reachability["citation_policy"],
             "citation_issues": citation_issues,
             "expected_citations_missing": expected_missing,
             "phi_hit_count": 1 if phi_hit else 0,
@@ -818,12 +1219,14 @@ def run_harness_for_model(
             "response_artifacts": response_paths,
             "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
             "manual_review_needed": store_replay_responses and llm_called,
+            "manual_lanes": manual_lanes,
             "semantic_pass": None if store_replay_responses and llm_called else None,
             "grounding_pass": None if store_replay_responses and llm_called else None,
             "citation_claim_pass": None if store_replay_responses and llm_called else None,
             "safety_pass": None if store_replay_responses and llm_called else None,
         }
         row.update(content_lane_meta(case, trace, llm_called=llm_called))
+        row["failure_lanes"] = classify_failure_lanes(row)
         row["failure_owner"] = classify_failure(row)
         results.append(row)
         if row["phi_hit_count"] > 0:
@@ -866,7 +1269,7 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                 f"{sum(1 for c in model_call_cases if c.get('valid_json') is True)} | "
                 f"{sum(1 for c in model_call_cases if c.get('strict_schema') is True)} | "
                 f"{sum(1 for c in model_call_cases if c.get('structural_drift'))} | "
-                f"{sum(1 for c in cases if c.get('citation_issues') or c.get('expected_citations_missing'))} | "
+                f"{sum(1 for c in cases if has_citation_issue(c))} | "
                 f"{sum(1 for c in cases if c.get('content_lane_pass') is True)} | "
                 f"{sum(1 for c in cases if c.get('content_lane_pass') is False)} | "
                 f"{sum(1 for c in cases if c.get('content_lane_pass') is None)} | "
@@ -884,6 +1287,13 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                     f"retrieved={case['retrieved_count']} citations={case['citation_count']} "
                     f"content={case['content_lane_status']} "
                     f"keyword_hits={case['content_keywords_hit_count']}/{case['content_keywords_expected_count']} "
+                    f"reach_gap={len(case.get('expected_source_not_retrieved') or [])} "
+                    f"cite_gap={len(case.get('expected_retrieved_not_cited') or [])} "
+                    f"policy_reach={case.get('citation_policy_reachability_pass')} "
+                    f"policy_select={case.get('citation_policy_selection_pass')} "
+                    f"policy_pass={case.get('citation_policy', {}).get('policy_pass')} "
+                    f"sid={case.get('source_id_fidelity', {}).get('source_id_fidelity_lane_status', '-')} "
+                    f"lanes={','.join(case.get('failure_lanes') or []) or '-'} "
                     f"phi={case['phi_hit_count']} "
                     f"phi_blocking={','.join(case.get('phi_scan_blocking_hit_fields') or []) or '-'} "
                     f"phi_nonblocking={','.join(case.get('phi_scan_nonblocking_hit_fields') or []) or '-'} "

@@ -161,6 +161,7 @@
     "expected_citations_includes_at_least": "array of source_id strings (subset of retrieved set). carry case 는 smoke artifact value 그대로.",
     "acceptable_citation_set": "optional object. If present, scorer uses required_all/core_any_of/strong_all/optional_hits/invalid_aliases instead of treating expected_citations_includes_at_least as the only pass surface.",
     "expected_summary_keywords": "array of keyword strings expected in summary, or '{TBD-by-user-spot-check}' for RA-01/RA-02/RA-05 new cases pending Phase 2 spot check (RA-03 resolved; RA-04 N/A early return)",
+    "expected_summary_rubric": "optional object for H2 keyword-to-concept scoring. literal_required keeps exact substring checks; concept_required accepts {id, any_of[]} alternatives. If omitted, runner keeps legacy expected_summary_keywords scoring.",
     "user_verdict_carry": "string (PASS / partially resolved / NO-GO / TBD)"
   },
   "placeholder_policy": {

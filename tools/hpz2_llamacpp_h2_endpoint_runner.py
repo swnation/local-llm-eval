@@ -50,6 +50,20 @@ APPROVED_RUNNER_WORKTREE_PATHS = {
     "docs/h2-c1-endpoint-hypothesis-replay-design-2026-06-02.md",
 }
 
+PHI_PATTERN_NAMES = [
+    "resident_registration_like",
+    "mobile_phone_like",
+    "landline_phone_like",
+    "chart_number_like",
+    "korean_name_label_like",
+]
+
+
+class HarnessHardStop(RuntimeError):
+    def __init__(self, message: str, partial_results: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.partial_results = partial_results
+
 
 def run(cmd: list[str], *, cwd: Path | None = None, timeout: int = 60) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -519,6 +533,104 @@ def classify_failure(case: dict[str, Any]) -> str:
     return ""
 
 
+def phi_pattern_hits(text: str, phi_patterns: list[Any]) -> list[str]:
+    hits: list[str] = []
+    for index, pattern in enumerate(phi_patterns):
+        try:
+            matched = bool(pattern.search(text))
+        except Exception:
+            matched = False
+        if matched:
+            hits.append(PHI_PATTERN_NAMES[index] if index < len(PHI_PATTERN_NAMES) else f"pattern_{index}")
+    return hits
+
+
+def phi_field_scan(value: Any, scan_output, phi_patterns: list[Any]) -> dict[str, Any]:
+    text = str(value or "")
+    hit, _ = scan_output(text)
+    return {
+        "hit": bool(hit),
+        "length": len(text),
+        "pattern_hits": phi_pattern_hits(text, phi_patterns),
+    }
+
+
+def replay_phi_diagnostics(
+    *,
+    body: dict[str, Any],
+    raw_llm_text: str,
+    scan_output,
+    phi_patterns: list[Any],
+) -> dict[str, Any]:
+    fields: list[dict[str, Any]] = []
+
+    def add(field: str, value: Any) -> None:
+        item = {"field": field}
+        item.update(phi_field_scan(value, scan_output, phi_patterns))
+        fields.append(item)
+
+    def add_body_scalars(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                add_body_scalars(item, f"{path}.{safe_slug(str(key))}")
+            return
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                add_body_scalars(item, f"{path}[{index}]")
+            return
+        if value is None or isinstance(value, bool):
+            return
+        if isinstance(value, (str, int, float)):
+            add(path, value)
+
+    add("summary", body.get("summary", ""))
+    add("error_message", body.get("error_message", ""))
+    for index, citation in enumerate(body.get("citations", []) or []):
+        if isinstance(citation, dict):
+            add(f"citations[{index}].snippet", citation.get("snippet", ""))
+    for index, item in enumerate(body.get("retrieved", []) or []):
+        if isinstance(item, dict):
+            add(f"retrieved[{index}].snippet", item.get("snippet", ""))
+    add_body_scalars(body, "body")
+    add("endpoint_body_json", json.dumps(body, ensure_ascii=False, sort_keys=True))
+    add("raw_llm_text", raw_llm_text)
+
+    hit_fields = [field for field in fields if field.get("hit")]
+    pattern_hits = sorted({name for field in hit_fields for name in field.get("pattern_hits", [])})
+    return {
+        "fields_scanned": len(fields),
+        "hit_count": len(hit_fields),
+        "hit_fields": hit_fields,
+        "pattern_hits": pattern_hits,
+    }
+
+
+def is_nonblocking_phi_diagnostic_field(field: str) -> bool:
+    if field == "endpoint_body_json":
+        return True
+    if field == "body.case_id":
+        return True
+    if re.fullmatch(r"body\.retrieved\[\d+\]\.similarity", field):
+        return True
+    return False
+
+
+def phi_diagnostic_blocking_fields(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in diagnostics.get("hit_fields", [])
+        if isinstance(item, dict) and not is_nonblocking_phi_diagnostic_field(str(item.get("field", "")))
+    ]
+
+
+def phi_diagnostic_nonblocking_fields(diagnostics: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in diagnostics.get("hit_fields", [])
+        if isinstance(item, dict) and is_nonblocking_phi_diagnostic_field(str(item.get("field", "")))
+    ]
+
+
 def write_replay_response_artifacts(
     *,
     model_label: str,
@@ -526,14 +638,19 @@ def write_replay_response_artifacts(
     body: dict[str, Any],
     raw_llm_text: str,
     scan_output,
+    phi_patterns: list[Any] | None = None,
 ) -> tuple[dict[str, str], bool]:
     paths: dict[str, str] = {}
     response_dir = RESULT_DIR / "responses" / safe_slug(model_label)
     response_dir.mkdir(parents=True, exist_ok=True)
     body_text = json.dumps(body, ensure_ascii=False, indent=2)
-    body_phi_hit, _ = scan_output(body_text)
-    raw_phi_hit = bool(raw_llm_text and scan_output(raw_llm_text)[0])
-    if body_phi_hit or raw_phi_hit:
+    diagnostics = replay_phi_diagnostics(
+        body=body,
+        raw_llm_text=raw_llm_text,
+        scan_output=scan_output,
+        phi_patterns=phi_patterns or [],
+    )
+    if phi_diagnostic_blocking_fields(diagnostics):
         return paths, True
     endpoint_path = response_dir / f"{safe_slug(case_id)}__endpoint_response.json"
     endpoint_path.write_text(body_text + "\n", encoding="utf-8", newline="\n")
@@ -576,7 +693,10 @@ def run_harness_for_model(
         returned_citation_issues,
     )
     from app import explain as explain_module
-    from app.llm.phi_strip import scan_output
+    from app.llm import phi_strip
+
+    scan_output = phi_strip.scan_output
+    phi_patterns = list(getattr(phi_strip, "PHI_PATTERNS", []))
 
     original_generate = explain_module.generate_llm
     traces: list[dict[str, Any]] = []
@@ -622,18 +742,41 @@ def run_harness_for_model(
         ]
         citation_issues = returned_citation_issues(body) if isinstance(body, dict) else ["<invalid-response>"]
         expected_missing = expected_citations_missing(body, expected) if isinstance(body, dict) else expected
-        phi_hit = output_phi_hit(body, scan_output) if isinstance(body, dict) else True
+        output_phi = output_phi_hit(body, scan_output) if isinstance(body, dict) else True
+        phi_hit = output_phi
         response_paths: dict[str, str] = {}
         raw_storage_phi_hit = False
+        phi_scan_diagnostics: dict[str, Any] = {}
         if store_replay_responses and isinstance(body, dict):
+            raw_llm_text = str(trace.get("_raw_llm_text_for_storage", "")) if llm_called else ""
+            phi_scan_diagnostics = replay_phi_diagnostics(
+                body=body,
+                raw_llm_text=raw_llm_text,
+                scan_output=scan_output,
+                phi_patterns=phi_patterns,
+            )
             response_paths, raw_storage_phi_hit = write_replay_response_artifacts(
                 model_label=model_label,
                 case_id=case_id,
                 body=body,
-                raw_llm_text=str(trace.get("_raw_llm_text_for_storage", "")) if llm_called else "",
+                raw_llm_text=raw_llm_text,
                 scan_output=scan_output,
+                phi_patterns=phi_patterns,
             )
             phi_hit = phi_hit or raw_storage_phi_hit
+        phi_scan_blocking_fields = [
+            str(item.get("field", ""))
+            for item in phi_diagnostic_blocking_fields(phi_scan_diagnostics)
+        ]
+        phi_scan_nonblocking_fields = [
+            str(item.get("field", ""))
+            for item in phi_diagnostic_nonblocking_fields(phi_scan_diagnostics)
+        ]
+        phi_scan_hit_fields = [
+            str(item.get("field", ""))
+            for item in phi_scan_diagnostics.get("hit_fields", [])
+            if isinstance(item, dict)
+        ]
         returned_source_ids = [
             str(citation.get("source_id", "")).strip()
             for citation in body.get("citations", []) or []
@@ -666,6 +809,12 @@ def run_harness_for_model(
             "citation_issues": citation_issues,
             "expected_citations_missing": expected_missing,
             "phi_hit_count": 1 if phi_hit else 0,
+            "phi_output_hit": bool(output_phi),
+            "phi_scan_diagnostics": phi_scan_diagnostics,
+            "phi_scan_hit_fields": phi_scan_hit_fields,
+            "phi_scan_blocking_hit_fields": phi_scan_blocking_fields,
+            "phi_scan_nonblocking_hit_fields": phi_scan_nonblocking_fields,
+            "phi_scan_pattern_hits": phi_scan_diagnostics.get("pattern_hits", []),
             "response_artifacts": response_paths,
             "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
             "manual_review_needed": store_replay_responses and llm_called,
@@ -678,7 +827,7 @@ def run_harness_for_model(
         row["failure_owner"] = classify_failure(row)
         results.append(row)
         if row["phi_hit_count"] > 0:
-            raise RuntimeError(f"PHI hard stop at {case_id}")
+            raise HarnessHardStop(f"PHI hard stop at {case_id}", results)
         if row["llm_called"] and not row["model_call_expected"]:
             raise RuntimeError(f"unexpected model call at {case_id}")
     return results
@@ -735,7 +884,11 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                     f"retrieved={case['retrieved_count']} citations={case['citation_count']} "
                     f"content={case['content_lane_status']} "
                     f"keyword_hits={case['content_keywords_hit_count']}/{case['content_keywords_expected_count']} "
-                    f"phi={case['phi_hit_count']} owner={case['failure_owner'] or '-'}\n"
+                    f"phi={case['phi_hit_count']} "
+                    f"phi_blocking={','.join(case.get('phi_scan_blocking_hit_fields') or []) or '-'} "
+                    f"phi_nonblocking={','.join(case.get('phi_scan_nonblocking_hit_fields') or []) or '-'} "
+                    f"phi_patterns={','.join(case.get('phi_scan_pattern_hits') or []) or '-'} "
+                    f"owner={case['failure_owner'] or '-'}\n"
                 )
             handle.write("\n")
     return json_path, md_path
@@ -875,6 +1028,8 @@ def main() -> int:
             payload["stopped_early"] = True
             payload["stop_reason"] = f"{label}: {type(exc).__name__}: {exc}"
             model_row["error"] = payload["stop_reason"]
+            if isinstance(exc, HarnessHardStop):
+                model_row["cases"] = exc.partial_results
             safe_reason = payload["stop_reason"].encode("ascii", errors="backslashreplace").decode("ascii")
             print(f"STOP {safe_reason}", flush=True)
         finally:

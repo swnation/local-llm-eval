@@ -899,6 +899,14 @@ def has_citation_issue(case: dict[str, Any]) -> bool:
     return False
 
 
+def manual_lanes_summary(case: dict[str, Any]) -> str:
+    lanes = case.get("manual_lanes") or {}
+    if not isinstance(lanes, dict):
+        return "-"
+    lane_names = ("semantic", "grounding", "citation_claim", "safety")
+    return "/".join(f"{name}:{lanes.get(name) or '-'}" for name in lane_names)
+
+
 def phi_pattern_hits(text: str, phi_patterns: list[Any]) -> list[str]:
     hits: list[str] = []
     for index, pattern in enumerate(phi_patterns):
@@ -1220,10 +1228,6 @@ def run_harness_for_model(
             "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
             "manual_review_needed": store_replay_responses and llm_called,
             "manual_lanes": manual_lanes,
-            "semantic_pass": None if store_replay_responses and llm_called else None,
-            "grounding_pass": None if store_replay_responses and llm_called else None,
-            "citation_claim_pass": None if store_replay_responses and llm_called else None,
-            "safety_pass": None if store_replay_responses and llm_called else None,
         }
         row.update(content_lane_meta(case, trace, llm_called=llm_called))
         row["failure_lanes"] = classify_failure_lanes(row)
@@ -1237,7 +1241,8 @@ def run_harness_for_model(
 
 
 def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
-    if payload.get("run_mode") == "c1_endpoint_replay":
+    is_c1_replay = payload.get("run_mode") == "c1_endpoint_replay"
+    if is_c1_replay:
         json_path = RESULT_DIR / "h2_c1_endpoint_replay_results.json"
         md_path = RESULT_DIR / "h2_c1_endpoint_replay_summary.md"
         title = "H2 C1 Endpoint Replay"
@@ -1280,6 +1285,12 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
         for model in payload["models"]:
             handle.write(f"### {model['label']}\n\n")
             for case in model.get("cases", []):
+                manual_detail = ""
+                if is_c1_replay:
+                    manual_detail = (
+                        f"manual_review={case.get('manual_review_needed')} "
+                        f"manual={manual_lanes_summary(case)} "
+                    )
                 handle.write(
                     f"- `{case['case_id']}` http={case['http_status']} status={case['emr_status']} "
                     f"llm_called={case['llm_called']} valid_json={case['valid_json']} "
@@ -1298,6 +1309,7 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                     f"phi_blocking={','.join(case.get('phi_scan_blocking_hit_fields') or []) or '-'} "
                     f"phi_nonblocking={','.join(case.get('phi_scan_nonblocking_hit_fields') or []) or '-'} "
                     f"phi_patterns={','.join(case.get('phi_scan_pattern_hits') or []) or '-'} "
+                    f"{manual_detail}"
                     f"owner={case['failure_owner'] or '-'}\n"
                 )
             handle.write("\n")

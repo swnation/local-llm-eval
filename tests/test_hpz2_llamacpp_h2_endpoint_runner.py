@@ -17,6 +17,60 @@ EVAL_SET = json.loads((ROOT / "prompts" / "rag_aware_eval_set_v0.1.json").read_t
 
 
 class H2EndpointRunnerTests(unittest.TestCase):
+    def _manual_lane_payload(self, run_mode: str) -> dict:
+        return {
+            "generated_at": "2026-06-03T00:00:00+09:00",
+            "run_mode": run_mode,
+            "stopped_early": False,
+            "stop_reason": "",
+            "models": [
+                {
+                    "label": "model-a",
+                    "cases": [
+                        {
+                            "case_id": "ra-03",
+                            "http_status": 200,
+                            "emr_status": "ok",
+                            "expected_status": "ok",
+                            "model_call_expected": True,
+                            "llm_called": True,
+                            "valid_json": True,
+                            "strict_schema": True,
+                            "structural_drift": False,
+                            "retrieved_count": 2,
+                            "citation_count": 1,
+                            "citation_issues": [],
+                            "expected_citations_missing": [],
+                            "content_lane_status": "not_scored_empty_rubric",
+                            "content_lane_pass": None,
+                            "content_keywords_hit_count": 0,
+                            "content_keywords_expected_count": 0,
+                            "expected_source_not_retrieved": [],
+                            "expected_retrieved_not_cited": [],
+                            "citation_policy_reachability_pass": True,
+                            "citation_policy_selection_pass": True,
+                            "citation_policy": {"policy_pass": True},
+                            "source_id_fidelity": {"source_id_fidelity_lane_status": "pass"},
+                            "failure_lanes": [],
+                            "phi_hit_count": 0,
+                            "phi_scan_blocking_hit_fields": [],
+                            "phi_scan_nonblocking_hit_fields": [],
+                            "phi_scan_pattern_hits": [],
+                            "manual_review_needed": True,
+                            "manual_lanes": {
+                                "semantic": "pending",
+                                "grounding": "pending",
+                                "citation_claim": "pending",
+                                "safety": "pending",
+                                "note": "",
+                            },
+                            "failure_owner": "",
+                        }
+                    ],
+                }
+            ],
+        }
+
     def test_c1_replay_defaults_to_pilot_models(self):
         self.assertEqual(
             runner.select_model_labels(c1_replay=True, primary4_c1_replay=False),
@@ -72,6 +126,28 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertTrue(phi_hit)
         self.assertEqual(paths, {})
         self.assertEqual([path for path in response_files if path.is_file()], [])
+
+    def test_c1_replay_summary_surfaces_manual_lanes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(runner, "RESULT_DIR", Path(tmp)):
+                json_path, md_path = runner.write_outputs(self._manual_lane_payload("c1_endpoint_replay"))
+                payload = json.loads(json_path.read_text(encoding="utf-8"))
+                markdown = md_path.read_text(encoding="utf-8")
+        self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["semantic"], "pending")
+        self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["note"], "")
+        self.assertIn("manual_review=True", markdown)
+        self.assertIn(
+            "manual=semantic:pending/grounding:pending/citation_claim:pending/safety:pending",
+            markdown,
+        )
+
+    def test_non_replay_summary_does_not_surface_manual_lanes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(runner, "RESULT_DIR", Path(tmp)):
+                _, md_path = runner.write_outputs(self._manual_lane_payload("content_lane_supplement"))
+                markdown = md_path.read_text(encoding="utf-8")
+        self.assertNotIn("manual_review=", markdown)
+        self.assertNotIn("manual=semantic:", markdown)
 
     def test_schema_meta_extracts_raw_citation_source_ids(self):
         meta = runner.schema_meta(

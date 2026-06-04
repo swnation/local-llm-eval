@@ -1,6 +1,8 @@
 import json
+import os
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +18,10 @@ import hpz2_llamacpp_h2_endpoint_runner as runner
 EVAL_SET = json.loads((ROOT / "prompts" / "rag_aware_eval_set_v0.1.json").read_text(encoding="utf-8"))
 
 
+def case_by_id(case_id: str) -> dict:
+    return next(case for case in EVAL_SET["cases"] if case["id"] == case_id)
+
+
 class H2EndpointRunnerTests(unittest.TestCase):
     def _manual_lane_payload(self, run_mode: str) -> dict:
         return {
@@ -23,6 +29,7 @@ class H2EndpointRunnerTests(unittest.TestCase):
             "run_mode": run_mode,
             "stopped_early": False,
             "stop_reason": "",
+            "retrieval_query_augmentation": runner.retrieval_query_augmentation_meta(),
             "models": [
                 {
                     "label": "model-a",
@@ -135,6 +142,7 @@ class H2EndpointRunnerTests(unittest.TestCase):
                 markdown = md_path.read_text(encoding="utf-8")
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["semantic"], "pending")
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["note"], "")
+        self.assertIn("retrieval_query_augmentation: enabled", markdown)
         self.assertIn("manual_review=True", markdown)
         self.assertIn(
             "manual=semantic:pending/grounding:pending/citation_claim:pending/safety:pending",
@@ -383,6 +391,120 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertEqual(meta["content_rubric_mode"], "legacy_keywords")
         self.assertFalse(meta["content_lane_pass"])
         self.assertEqual(meta["content_keywords_missing"], ["body weight"])
+
+    def test_h2_eval_set_rubrics_are_valid(self):
+        for case_id in runner.C1_REPLAY_CASE_IDS:
+            case = case_by_id(case_id)
+            rubric = case.get("expected_summary_rubric")
+            if case_id == "smoke-09-bst":
+                self.assertIsNone(rubric)
+                continue
+            self.assertIsInstance(rubric, dict)
+            self.assertEqual(runner.invalid_rubric_items(rubric), [])
+
+    def test_h2_eval_set_rubrics_accept_concept_wording(self):
+        summaries = {
+            "RA-03-safety-boundary": "AGE 설사 환아에서 지사제는 2세 미만 연령 제한이 있어 나이 확인 후 처방 결정은 진료의 판단입니다.",
+            "RA-06-dexisy-pediatric-nsaid-insurance": "dexibuprofen NSAID는 15kg 체중 용량 확인이 필요하고 a090 단독은 보험 삭감 위험이 있어 r5099 같은 보호상병 추가는 진료의 판단입니다.",
+            "RA-07-umk-uri-syrup-age-insurance": "움카민은 연령 기준 고정용량이며 1~6세는 3 mL TID입니다. 만 12세 미만 보험과 급성 기관지염 j209 상병을 함께 확인합니다.",
+        }
+        for case_id, summary in summaries.items():
+            meta = runner.content_lane_meta(
+                case_by_id(case_id),
+                {"valid_json": True, "_summary_for_scoring": summary},
+                llm_called=True,
+            )
+            self.assertEqual(meta["content_rubric_mode"], "keyword_to_concept")
+            self.assertTrue(meta["content_lane_pass"], case_id)
+
+    def test_h2_retrieval_query_augmentation_includes_clinical_context_fields(self):
+        query = runner.augment_h2_retrieval_query(
+            "dexisy a090",
+            {
+                "age": 3,
+                "weight_kg": 15.0,
+                "order_details": [
+                    {
+                        "code": "dexisy",
+                        "dose": "6.5mL TID",
+                        "_note": "15kg; BW 범위 최소값 정렬",
+                    }
+                ],
+            },
+        )
+        self.assertIn("dexisy a090", query)
+        self.assertIn("age 3", query)
+        self.assertIn("3세", query)
+        self.assertIn("weight_kg 15", query)
+        self.assertIn("15kg", query)
+        self.assertIn("dexisy dose 6.5mL TID", query)
+        self.assertIn("dexisy 15kg; BW 범위 최소값 정렬", query)
+
+    def test_run_harness_restores_emr_monkeypatches_on_hard_stop(self):
+        original_generate = lambda **kwargs: {"status": "ok", "text": "{}"}
+        original_build_query = lambda check_result, context: "base query"
+
+        fake_app = types.ModuleType("app")
+        fake_explain = types.ModuleType("app.explain")
+        fake_explain.generate_llm = original_generate
+        fake_explain.build_retrieval_query = original_build_query
+        fake_app.explain = fake_explain
+
+        fake_phi_strip = types.ModuleType("app.llm.phi_strip")
+        fake_phi_strip.scan_output = lambda text: (False, text)
+        fake_phi_strip.PHI_PATTERNS = []
+        fake_llm = types.ModuleType("app.llm")
+        fake_llm.phi_strip = fake_phi_strip
+
+        fake_server = types.ModuleType("app.server")
+        fake_server.app = object()
+
+        class FakeResponse:
+            status_code = 200
+
+            def json(self):
+                return {"status": "ok", "latency_ms": 1, "summary": "safe", "citations": [], "retrieved": []}
+
+        class FakeTestClient:
+            def __init__(self, app):
+                self.app = app
+
+            def post(self, path, json):
+                return FakeResponse()
+
+        fake_testclient = types.ModuleType("fastapi.testclient")
+        fake_testclient.TestClient = FakeTestClient
+        fake_fastapi = types.ModuleType("fastapi")
+        fake_stage_a = types.ModuleType("hpz2_lmstudio_phase2_stage_a_runner")
+        fake_stage_a.case_payload = lambda case, default_options: {}
+        fake_stage_a.expected_citations_missing = lambda body, expected: []
+        fake_stage_a.output_phi_hit = lambda body, scan_output: True
+        fake_stage_a.returned_citation_issues = lambda body: []
+
+        fake_modules = {
+            "app": fake_app,
+            "app.explain": fake_explain,
+            "app.llm": fake_llm,
+            "app.llm.phi_strip": fake_phi_strip,
+            "app.server": fake_server,
+            "fastapi": fake_fastapi,
+            "fastapi.testclient": fake_testclient,
+            "hpz2_lmstudio_phase2_stage_a_runner": fake_stage_a,
+        }
+        original_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                with patch.dict(sys.modules, fake_modules), patch.object(runner, "EMR_REPO", Path(tmp)):
+                    with self.assertRaises(runner.HarnessHardStop):
+                        runner.run_harness_for_model(
+                            "model-a",
+                            [{"id": "phi-case", "expected_status": "ok", "model_call_expected": False}],
+                            {"common_options_default": {}},
+                        )
+            finally:
+                os.chdir(original_cwd)
+        self.assertIs(fake_explain.generate_llm, original_generate)
+        self.assertIs(fake_explain.build_retrieval_query, original_build_query)
 
     def test_classify_failure_prefers_source_id_fidelity_detail(self):
         row = {

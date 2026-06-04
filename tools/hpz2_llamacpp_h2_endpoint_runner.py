@@ -57,6 +57,12 @@ PHI_PATTERN_NAMES = [
     "chart_number_like",
     "korean_name_label_like",
 ]
+RETRIEVAL_QUERY_AUGMENTATION_FIELDS = [
+    "context.age",
+    "context.weight_kg",
+    "context.order_details[].dose",
+    "context.order_details[]._note",
+]
 
 
 class HarnessHardStop(RuntimeError):
@@ -132,6 +138,62 @@ def hp_json(script: str, *, timeout: int = 60) -> Any:
 
 def ps_array(values: list[Any]) -> str:
     return "@(" + ",".join(ps_quote(value) for value in values) + ")"
+
+
+def clean_query_fragment(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def scalar_query_value(value: Any) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return clean_query_fragment(value)
+
+
+def unique_query(parts: list[Any]) -> str:
+    values: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        text = clean_query_fragment(part)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        values.append(text)
+    return " ".join(values)
+
+
+def augment_h2_retrieval_query(base_query: str, context: dict[str, Any]) -> str:
+    parts: list[Any] = [base_query]
+    age = scalar_query_value(context.get("age"))
+    if age:
+        parts.extend([f"age {age}", f"{age}세"])
+    weight_kg = scalar_query_value(context.get("weight_kg"))
+    if weight_kg:
+        parts.extend([f"weight_kg {weight_kg}", f"{weight_kg}kg"])
+    for item in context.get("order_details", []) or []:
+        if not isinstance(item, dict):
+            continue
+        code = clean_query_fragment(item.get("code"))
+        dose = clean_query_fragment(item.get("dose"))
+        note = clean_query_fragment(item.get("_note"))
+        if dose:
+            parts.append(f"{code} dose {dose}" if code else f"dose {dose}")
+        if note:
+            parts.append(f"{code} {note}" if code else note)
+    return unique_query(parts)
+
+
+def retrieval_query_augmentation_meta() -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "scope": "H2 endpoint runner only",
+        "fields": RETRIEVAL_QUERY_AUGMENTATION_FIELDS,
+    }
 
 
 def safe_slug(value: str) -> str:
@@ -1073,6 +1135,7 @@ def run_harness_for_model(
     phi_patterns = list(getattr(phi_strip, "PHI_PATTERNS", []))
 
     original_generate = explain_module.generate_llm
+    original_build_retrieval_query = explain_module.build_retrieval_query
     traces: list[dict[str, Any]] = []
 
     def wrapped_generate(*, prompt: str, system: str = "", settings=None, **kwargs: Any) -> dict[str, Any]:
@@ -1090,154 +1153,164 @@ def run_harness_for_model(
         traces.append(meta)
         return result
 
-    explain_module.generate_llm = wrapped_generate
-    from app.server import app
+    def wrapped_build_retrieval_query(check_result: dict[str, Any], context: dict[str, Any]) -> str:
+        base_query = original_build_retrieval_query(check_result, context)
+        return augment_h2_retrieval_query(base_query, context)
 
-    client = TestClient(app)
-    default_options = dict(eval_set.get("common_options_default", {}))
-    results: list[dict[str, Any]] = []
-    for case in cases:
-        case_id = str(case.get("id", ""))
-        payload = case_payload(case, default_options)
-        before = len(traces)
-        started = time.perf_counter()
-        response = client.post("/explain", json=payload)
-        wall_ms = int((time.perf_counter() - started) * 1000)
-        try:
-            body = response.json()
-        except Exception:
-            body = {}
-        llm_called = len(traces) > before
-        trace = traces[-1] if llm_called else {}
-        expected = [
-            str(source_id)
-            for source_id in case.get("expected_citations_includes_at_least", [])
-            if str(source_id) and not str(source_id).startswith("{TBD")
-        ]
-        citation_issues = returned_citation_issues(body) if isinstance(body, dict) else ["<invalid-response>"]
-        expected_missing = expected_citations_missing(body, expected) if isinstance(body, dict) else expected
-        output_phi = output_phi_hit(body, scan_output) if isinstance(body, dict) else True
-        phi_hit = output_phi
-        response_paths: dict[str, str] = {}
-        raw_storage_phi_hit = False
-        phi_scan_diagnostics: dict[str, Any] = {}
-        if store_replay_responses and isinstance(body, dict):
-            raw_llm_text = str(trace.get("_raw_llm_text_for_storage", "")) if llm_called else ""
-            phi_scan_diagnostics = replay_phi_diagnostics(
-                body=body,
-                raw_llm_text=raw_llm_text,
-                scan_output=scan_output,
-                phi_patterns=phi_patterns,
+    explain_module.generate_llm = wrapped_generate
+    explain_module.build_retrieval_query = wrapped_build_retrieval_query
+    try:
+        from app.server import app
+
+        client = TestClient(app)
+        default_options = dict(eval_set.get("common_options_default", {}))
+        results: list[dict[str, Any]] = []
+        for case in cases:
+            case_id = str(case.get("id", ""))
+            payload = case_payload(case, default_options)
+            before = len(traces)
+            started = time.perf_counter()
+            response = client.post("/explain", json=payload)
+            wall_ms = int((time.perf_counter() - started) * 1000)
+            try:
+                body = response.json()
+            except Exception:
+                body = {}
+            llm_called = len(traces) > before
+            trace = traces[-1] if llm_called else {}
+            expected = [
+                str(source_id)
+                for source_id in case.get("expected_citations_includes_at_least", [])
+                if str(source_id) and not str(source_id).startswith("{TBD")
+            ]
+            citation_issues = returned_citation_issues(body) if isinstance(body, dict) else ["<invalid-response>"]
+            expected_missing = expected_citations_missing(body, expected) if isinstance(body, dict) else expected
+            output_phi = output_phi_hit(body, scan_output) if isinstance(body, dict) else True
+            phi_hit = output_phi
+            response_paths: dict[str, str] = {}
+            raw_storage_phi_hit = False
+            phi_scan_diagnostics: dict[str, Any] = {}
+            if store_replay_responses and isinstance(body, dict):
+                raw_llm_text = str(trace.get("_raw_llm_text_for_storage", "")) if llm_called else ""
+                phi_scan_diagnostics = replay_phi_diagnostics(
+                    body=body,
+                    raw_llm_text=raw_llm_text,
+                    scan_output=scan_output,
+                    phi_patterns=phi_patterns,
+                )
+                response_paths, raw_storage_phi_hit = write_replay_response_artifacts(
+                    model_label=model_label,
+                    case_id=case_id,
+                    body=body,
+                    raw_llm_text=raw_llm_text,
+                    scan_output=scan_output,
+                    phi_patterns=phi_patterns,
+                )
+                phi_hit = phi_hit or raw_storage_phi_hit
+            phi_scan_blocking_fields = [
+                str(item.get("field", ""))
+                for item in phi_diagnostic_blocking_fields(phi_scan_diagnostics)
+            ]
+            phi_scan_nonblocking_fields = [
+                str(item.get("field", ""))
+                for item in phi_diagnostic_nonblocking_fields(phi_scan_diagnostics)
+            ]
+            phi_scan_hit_fields = [
+                str(item.get("field", ""))
+                for item in phi_scan_diagnostics.get("hit_fields", [])
+                if isinstance(item, dict)
+            ]
+            returned_source_ids = [
+                str(citation.get("source_id", "")).strip()
+                for citation in body.get("citations", []) or []
+                if isinstance(citation, dict)
+            ]
+            retrieved_source_ids = [
+                str(item.get("source_id", "")).strip()
+                for item in body.get("retrieved", []) or []
+                if isinstance(item, dict)
+            ]
+            raw_citation_source_ids = trace.get("raw_citation_source_ids", []) if llm_called else []
+            source_id_fidelity = source_id_fidelity_meta(raw_citation_source_ids, retrieved_source_ids)
+            reachability = citation_reachability_meta(
+                case,
+                expected_source_ids=expected,
+                retrieved_source_ids=retrieved_source_ids,
+                returned_source_ids=returned_source_ids,
             )
-            response_paths, raw_storage_phi_hit = write_replay_response_artifacts(
-                model_label=model_label,
-                case_id=case_id,
-                body=body,
-                raw_llm_text=raw_llm_text,
-                scan_output=scan_output,
-                phi_patterns=phi_patterns,
+            manual_lanes = (
+                {
+                    "semantic": "pending",
+                    "grounding": "pending",
+                    "citation_claim": "pending",
+                    "safety": "pending",
+                    "note": "",
+                }
+                if store_replay_responses and llm_called
+                else {}
             )
-            phi_hit = phi_hit or raw_storage_phi_hit
-        phi_scan_blocking_fields = [
-            str(item.get("field", ""))
-            for item in phi_diagnostic_blocking_fields(phi_scan_diagnostics)
-        ]
-        phi_scan_nonblocking_fields = [
-            str(item.get("field", ""))
-            for item in phi_diagnostic_nonblocking_fields(phi_scan_diagnostics)
-        ]
-        phi_scan_hit_fields = [
-            str(item.get("field", ""))
-            for item in phi_scan_diagnostics.get("hit_fields", [])
-            if isinstance(item, dict)
-        ]
-        returned_source_ids = [
-            str(citation.get("source_id", "")).strip()
-            for citation in body.get("citations", []) or []
-            if isinstance(citation, dict)
-        ]
-        retrieved_source_ids = [
-            str(item.get("source_id", "")).strip()
-            for item in body.get("retrieved", []) or []
-            if isinstance(item, dict)
-        ]
-        raw_citation_source_ids = trace.get("raw_citation_source_ids", []) if llm_called else []
-        source_id_fidelity = source_id_fidelity_meta(raw_citation_source_ids, retrieved_source_ids)
-        reachability = citation_reachability_meta(
-            case,
-            expected_source_ids=expected,
-            retrieved_source_ids=retrieved_source_ids,
-            returned_source_ids=returned_source_ids,
-        )
-        manual_lanes = (
-            {
-                "semantic": "pending",
-                "grounding": "pending",
-                "citation_claim": "pending",
-                "safety": "pending",
-                "note": "",
+            row = {
+                "case_id": case_id,
+                "http_status": response.status_code,
+                "emr_status": str(body.get("status", "")) if isinstance(body, dict) else "",
+                "expected_status": str(case.get("expected_status", "ok")),
+                "model_call_expected": bool(case.get("model_call_expected", True)),
+                "llm_called": llm_called,
+                "wall_ms": wall_ms,
+                "emr_latency_ms": body.get("latency_ms") if isinstance(body, dict) else None,
+                "valid_json": trace.get("valid_json") if llm_called else None,
+                "strict_schema": trace.get("strict_schema") if llm_called else None,
+                "citation_format_ok": trace.get("citation_format_ok") if llm_called else None,
+                "structural_drift": (not trace.get("valid_json") or not trace.get("strict_schema") or not trace.get("citation_format_ok")) if llm_called else False,
+                "raw_citation_count": trace.get("raw_citation_count") if llm_called else None,
+                "raw_citation_source_ids": raw_citation_source_ids,
+                "extra_top_level_keys": trace.get("extra_top_level_keys", []) if llm_called else [],
+                "retrieved_count": len(body.get("retrieved", []) or []) if isinstance(body, dict) else 0,
+                "citation_count": len(body.get("citations", []) or []) if isinstance(body, dict) else 0,
+                "returned_source_ids": returned_source_ids,
+                "retrieved_source_ids": retrieved_source_ids,
+                "source_id_fidelity": source_id_fidelity,
+                "expected_source_ids": reachability["expected_source_ids"],
+                "expected_source_retrieved": reachability["expected_source_retrieved"],
+                "expected_source_not_retrieved": reachability["expected_source_not_retrieved"],
+                "expected_retrieved_not_cited": reachability["expected_retrieved_not_cited"],
+                "expected_source_satisfied": reachability["expected_source_satisfied"],
+                "expected_source_reachability_pass": reachability["expected_source_reachability_pass"],
+                "citation_selection_pass": reachability["citation_selection_pass"],
+                "citation_policy_reachability_pass": reachability["citation_policy_reachability_pass"],
+                "citation_policy_selection_pass": reachability["citation_policy_selection_pass"],
+                "citation_policy_required_not_retrieved": reachability["citation_policy_required_not_retrieved"],
+                "citation_policy_required_retrieved_not_cited": reachability["citation_policy_required_retrieved_not_cited"],
+                "citation_policy_core_not_retrieved": reachability["citation_policy_core_not_retrieved"],
+                "citation_policy_core_retrieved_not_cited": reachability["citation_policy_core_retrieved_not_cited"],
+                "citation_policy": reachability["citation_policy"],
+                "citation_issues": citation_issues,
+                "expected_citations_missing": expected_missing,
+                "phi_hit_count": 1 if phi_hit else 0,
+                "phi_output_hit": bool(output_phi),
+                "phi_scan_diagnostics": phi_scan_diagnostics,
+                "phi_scan_hit_fields": phi_scan_hit_fields,
+                "phi_scan_blocking_hit_fields": phi_scan_blocking_fields,
+                "phi_scan_nonblocking_hit_fields": phi_scan_nonblocking_fields,
+                "phi_scan_pattern_hits": phi_scan_diagnostics.get("pattern_hits", []),
+                "response_artifacts": response_paths,
+                "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
+                "manual_review_needed": store_replay_responses and llm_called,
+                "manual_lanes": manual_lanes,
+                "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
             }
-            if store_replay_responses and llm_called
-            else {}
-        )
-        row = {
-            "case_id": case_id,
-            "http_status": response.status_code,
-            "emr_status": str(body.get("status", "")) if isinstance(body, dict) else "",
-            "expected_status": str(case.get("expected_status", "ok")),
-            "model_call_expected": bool(case.get("model_call_expected", True)),
-            "llm_called": llm_called,
-            "wall_ms": wall_ms,
-            "emr_latency_ms": body.get("latency_ms") if isinstance(body, dict) else None,
-            "valid_json": trace.get("valid_json") if llm_called else None,
-            "strict_schema": trace.get("strict_schema") if llm_called else None,
-            "citation_format_ok": trace.get("citation_format_ok") if llm_called else None,
-            "structural_drift": (not trace.get("valid_json") or not trace.get("strict_schema") or not trace.get("citation_format_ok")) if llm_called else False,
-            "raw_citation_count": trace.get("raw_citation_count") if llm_called else None,
-            "raw_citation_source_ids": raw_citation_source_ids,
-            "extra_top_level_keys": trace.get("extra_top_level_keys", []) if llm_called else [],
-            "retrieved_count": len(body.get("retrieved", []) or []) if isinstance(body, dict) else 0,
-            "citation_count": len(body.get("citations", []) or []) if isinstance(body, dict) else 0,
-            "returned_source_ids": returned_source_ids,
-            "retrieved_source_ids": retrieved_source_ids,
-            "source_id_fidelity": source_id_fidelity,
-            "expected_source_ids": reachability["expected_source_ids"],
-            "expected_source_retrieved": reachability["expected_source_retrieved"],
-            "expected_source_not_retrieved": reachability["expected_source_not_retrieved"],
-            "expected_retrieved_not_cited": reachability["expected_retrieved_not_cited"],
-            "expected_source_satisfied": reachability["expected_source_satisfied"],
-            "expected_source_reachability_pass": reachability["expected_source_reachability_pass"],
-            "citation_selection_pass": reachability["citation_selection_pass"],
-            "citation_policy_reachability_pass": reachability["citation_policy_reachability_pass"],
-            "citation_policy_selection_pass": reachability["citation_policy_selection_pass"],
-            "citation_policy_required_not_retrieved": reachability["citation_policy_required_not_retrieved"],
-            "citation_policy_required_retrieved_not_cited": reachability["citation_policy_required_retrieved_not_cited"],
-            "citation_policy_core_not_retrieved": reachability["citation_policy_core_not_retrieved"],
-            "citation_policy_core_retrieved_not_cited": reachability["citation_policy_core_retrieved_not_cited"],
-            "citation_policy": reachability["citation_policy"],
-            "citation_issues": citation_issues,
-            "expected_citations_missing": expected_missing,
-            "phi_hit_count": 1 if phi_hit else 0,
-            "phi_output_hit": bool(output_phi),
-            "phi_scan_diagnostics": phi_scan_diagnostics,
-            "phi_scan_hit_fields": phi_scan_hit_fields,
-            "phi_scan_blocking_hit_fields": phi_scan_blocking_fields,
-            "phi_scan_nonblocking_hit_fields": phi_scan_nonblocking_fields,
-            "phi_scan_pattern_hits": phi_scan_diagnostics.get("pattern_hits", []),
-            "response_artifacts": response_paths,
-            "replay_raw_storage_phi_blocked": raw_storage_phi_hit,
-            "manual_review_needed": store_replay_responses and llm_called,
-            "manual_lanes": manual_lanes,
-        }
-        row.update(content_lane_meta(case, trace, llm_called=llm_called))
-        row["failure_lanes"] = classify_failure_lanes(row)
-        row["failure_owner"] = classify_failure(row)
-        results.append(row)
-        if row["phi_hit_count"] > 0:
-            raise HarnessHardStop(f"PHI hard stop at {case_id}", results)
-        if row["llm_called"] and not row["model_call_expected"]:
-            raise RuntimeError(f"unexpected model call at {case_id}")
-    return results
+            row.update(content_lane_meta(case, trace, llm_called=llm_called))
+            row["failure_lanes"] = classify_failure_lanes(row)
+            row["failure_owner"] = classify_failure(row)
+            results.append(row)
+            if row["phi_hit_count"] > 0:
+                raise HarnessHardStop(f"PHI hard stop at {case_id}", results)
+            if row["llm_called"] and not row["model_call_expected"]:
+                raise RuntimeError(f"unexpected model call at {case_id}")
+        return results
+    finally:
+        explain_module.generate_llm = original_generate
+        explain_module.build_retrieval_query = original_build_retrieval_query
 
 
 def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
@@ -1261,6 +1334,11 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
         handle.write(f"- run_mode: `{payload.get('run_mode')}`\n")
         handle.write(f"- stopped_early: `{payload['stopped_early']}`\n")
         handle.write(f"- stop_reason: `{payload.get('stop_reason') or ''}`\n")
+        retrieval_aug = payload.get("retrieval_query_augmentation") or {}
+        if retrieval_aug.get("enabled"):
+            handle.write(
+                f"- retrieval_query_augmentation: enabled; fields={','.join(retrieval_aug.get('fields') or [])}\n"
+            )
         handle.write(raw_line)
         handle.write("| model | cases | http 200 | ok | valid json | strict schema | structural drift | citation issue | content pass | content missing | content not scored | phi hits | unexpected calls |\n")
         handle.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
@@ -1405,8 +1483,9 @@ def main() -> int:
         "content_lane_method": (
             "manual-review-first C1 replay; keyword hits retained as supporting metadata"
             if args.confirm_h2_c1_endpoint_replay
-            else "expected_summary_keywords substring check; raw summaries parsed transiently and not written"
+            else "expected_summary_rubric when present; legacy expected_summary_keywords retained as supporting metadata"
         ),
+        "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
         "raw_model_responses_stored": bool(args.confirm_h2_c1_endpoint_replay),
         "selected_models": model_labels,
         "selected_cases": [str(case.get("id", "")) for case in cases],

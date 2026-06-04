@@ -265,11 +265,11 @@ def write_outputs(payload: dict[str, Any], root: Path, timestamp: str) -> tuple[
         handle.write(f"- config: `{payload.get('config')}`\n")
         handle.write(f"- eval_set: `{payload.get('eval_set')}`\n")
         handle.write("- endpoint: not used; L2 synthetic only\n\n")
-        handle.write("| model | case | status | semantic | normalizer | native | core cite | strong cite | failure |\n")
-        handle.write("|---|---|---|---:|---:|---:|---:|---:|---|\n")
+        handle.write("| model | case | status | channel | semantic | normalizer | native | core cite | strong cite | failure |\n")
+        handle.write("|---|---|---|---|---:|---:|---:|---:|---:|---|\n")
         for row in payload.get("results", []):
             if not row.get("cases"):
-                handle.write(f"| {row.get('model_label')} | - | {row.get('status')} | - | - | - | - | - | {row.get('error', '')} |\n")
+                handle.write(f"| {row.get('model_label')} | - | {row.get('status')} | - | - | - | - | - | - | {row.get('error', '')} |\n")
                 continue
             for case in row.get("cases", []):
                 lanes = case.get("lanes", {})
@@ -278,7 +278,7 @@ def write_outputs(payload: dict[str, Any], root: Path, timestamp: str) -> tuple[
                 native = lanes.get("native_contract_lane", {})
                 citation = case.get("citation_score", {})
                 handle.write(
-                    f"| {row.get('model_label')} | {case.get('case_id')} | {case.get('api_status')} | "
+                    f"| {row.get('model_label')} | {case.get('case_id')} | {case.get('api_status')} | {case.get('output_channel_status', '')} | "
                     f"{semantic.get('semantic_pass')} | {normalizer.get('normalizer_pass')} | "
                     f"{native.get('native_contract_pass')} | {citation.get('core_citation_pass')} | "
                     f"{citation.get('strong_citation_pass')} | {semantic.get('failure_owner') or row.get('error') or ''} |\n"
@@ -405,6 +405,7 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[st
                         l2_case=case,
                         eval_case=eval_case,
                         eval_set=eval_set,
+                        output_channel_status=str(response.get("output_channel_status", "content")),
                     )
                     row["cases"].append(
                         {
@@ -414,6 +415,12 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[st
                             "latency_ms": response.get("latency_ms"),
                             "usage": response.get("usage", {}),
                             "error": response.get("error"),
+                            "output_channel_status": response.get("output_channel_status", ""),
+                            "extraction_channel": response.get("extraction_channel", ""),
+                            "content_chars": response.get("content_chars", 0),
+                            "reasoning_chars": response.get("reasoning_chars", 0),
+                            "message_keys": response.get("message_keys", []),
+                            "finish_reason": response.get("finish_reason"),
                             "lanes": lanes["lanes"],
                             "citation_score": lanes["citation_score"],
                             "r2_metric_hooks": lanes["r2_metric_hooks"],

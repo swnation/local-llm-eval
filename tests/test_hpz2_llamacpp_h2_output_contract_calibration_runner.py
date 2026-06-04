@@ -22,7 +22,43 @@ CONTRACTS = {contract["id"]: contract for contract in FIXTURE["contracts"]}
 PILOT_MODELS = [model for model in CONFIG["models"] if model["label"] in runner.PILOT_MODELS]
 
 
+class FakeProc:
+    pid = 4242
+    returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        self.returncode = 0
+
+    def wait(self, timeout=None):
+        self.returncode = 0
+        return 0
+
+    def kill(self):
+        self.returncode = -9
+
+
 class OutputContractCalibrationRunnerTests(unittest.TestCase):
+    def run_real_args(self, tmp: str) -> Namespace:
+        return Namespace(
+            config="models_config_hpz2_llamacpp_phase2_l2_v0.1.json",
+            fixture="prompts/h2_output_contract_calibration_v0.1.json",
+            output_root=tmp,
+            fallback_args=False,
+            confirm_hpz2=True,
+            confirm_output_contract_calibration=True,
+        )
+
+    def read_single_cell(self, tmp: str) -> tuple[dict, Path]:
+        result_dirs = sorted(Path(tmp).glob("h2_output_contract_calibration_*"))
+        self.assertEqual(len(result_dirs), 1)
+        result_path = result_dirs[0] / "output_contract_calibration_results.json"
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        cell = payload["models"][0]["cells"][0]
+        return cell, result_dirs[0]
+
     def test_c1_native_contract_passes_with_bracketed_sources(self):
         text = '{"summary":"DEMO는 원내 제한 대상이며 처방 판단은 진료의 영역입니다.","citations":["[rule:drug:demo]"]}'
         result = runner.normalize_output(text, CONTRACTS["C1"], CASE)
@@ -158,6 +194,104 @@ class OutputContractCalibrationRunnerTests(unittest.TestCase):
         self.assertIn("claim cite", text)
         self.assertIn("safety", text)
         self.assertIn("manual_review_needed", text)
+
+    def test_workflow_accept_requires_completed_manual_review_lanes(self):
+        cell = {
+            "api_status": "ok",
+            "normalizer_pass": True,
+            "manual_review_needed": True,
+            "semantic_pass": None,
+            "grounding_pass": None,
+            "citation_claim_pass": None,
+            "safety_pass": None,
+            "failure_owner": "manual_review_needed",
+        }
+        self.assertFalse(runner.workflow_accept(cell))
+        self.assertEqual(runner.quarantine_reason(cell), "manual_review_required")
+        cell.update(
+            {
+                "manual_review_needed": False,
+                "semantic_pass": True,
+                "grounding_pass": True,
+                "citation_claim_pass": True,
+                "safety_pass": True,
+                "failure_owner": "",
+            }
+        )
+        self.assertTrue(runner.workflow_accept(cell))
+
+    def test_run_real_records_reasoning_only_as_output_channel_policy(self):
+        reasoning_text = '{"summary":"hidden","citations":["[rule:drug:demo]"]}'
+        response = {
+            "status": "ok",
+            "text": "",
+            "reasoning_text": reasoning_text,
+            "output_channel_status": "reasoning_only_output",
+            "extraction_channel": "none",
+            "content_chars": 0,
+            "reasoning_chars": len(reasoning_text),
+            "message_keys": ["content", "reasoning_content"],
+            "finish_reason": "stop",
+            "usage": {},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(runner, "now_stamp", return_value="20260604_000000"), \
+                patch.object(runner, "preflight", return_value={"ok": True}), \
+                patch.object(runner, "preflight_pass", return_value=(True, "")), \
+                patch.object(runner, "memory_snapshot", return_value={"ok": True}), \
+                patch.object(runner, "wait_for_server", return_value={"ok": True}), \
+                patch.object(runner, "call_chat_completion", return_value=response), \
+                patch.object(runner.subprocess, "Popen", return_value=FakeProc()), \
+                patch.object(runner.time, "sleep"):
+                rc = runner.run_real(self.run_real_args(tmp), CONFIG, FIXTURE, PILOT_MODELS[:1], [CASE], [CONTRACTS["C1"]])
+
+            self.assertEqual(rc, 0)
+            cell, _ = self.read_single_cell(tmp)
+            self.assertEqual(cell["output_channel_status"], "reasoning_only_output")
+            self.assertEqual(cell["failure_owner"], "output_channel_policy")
+            self.assertEqual(cell["parse_status"], "not_scored_reasoning_only_output")
+            self.assertFalse(cell["raw_response_stored"])
+            self.assertTrue(cell["reasoning_response_stored"])
+            self.assertEqual(cell["quarantine_reason"], "reasoning_only_output")
+            self.assertFalse(cell["workflow_accept"])
+            self.assertEqual(cell["raw_response_path"], "")
+            self.assertTrue(Path(cell["reasoning_response_path"]).exists())
+
+    def test_run_real_redacts_phi_like_reasoning_before_storage(self):
+        response = {
+            "status": "ok",
+            "text": "",
+            "reasoning_text": "hidden phone 010-1234-5678",
+            "output_channel_status": "reasoning_only_output",
+            "extraction_channel": "none",
+            "content_chars": 0,
+            "reasoning_chars": 26,
+            "message_keys": ["content", "reasoning_content"],
+            "finish_reason": "stop",
+            "usage": {},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(runner, "now_stamp", return_value="20260604_000000"), \
+                patch.object(runner, "preflight", return_value={"ok": True}), \
+                patch.object(runner, "preflight_pass", return_value=(True, "")), \
+                patch.object(runner, "memory_snapshot", return_value={"ok": True}), \
+                patch.object(runner, "wait_for_server", return_value={"ok": True}), \
+                patch.object(runner, "call_chat_completion", return_value=response), \
+                patch.object(runner.subprocess, "Popen", return_value=FakeProc()), \
+                patch.object(runner.time, "sleep"):
+                rc = runner.run_real(self.run_real_args(tmp), CONFIG, FIXTURE, PILOT_MODELS[:1], [CASE], [CONTRACTS["C1"]])
+
+            self.assertEqual(rc, 1)
+            cell, result_dir = self.read_single_cell(tmp)
+            self.assertEqual(cell["failure_owner"], "PHI")
+            self.assertEqual(cell["quarantine_reason"], "phi_like_output")
+            self.assertFalse(cell["raw_response_stored"])
+            self.assertFalse(cell["reasoning_response_stored"])
+            self.assertFalse(cell["workflow_accept"])
+            self.assertEqual(cell["raw_response_path"], "")
+            self.assertEqual(cell["reasoning_response_path"], "")
+            self.assertEqual(list((result_dir / "raw_responses").glob("*.txt")), [])
+            self.assertEqual(list((result_dir / "reasoning_responses").glob("*.txt")), [])
 
 
 if __name__ == "__main__":

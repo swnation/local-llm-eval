@@ -305,6 +305,64 @@ def phi_redacted_scoring(raw_hits: list[str], contract: dict[str, Any]) -> dict[
     }
 
 
+def output_channel_policy_scoring(contract: dict[str, Any], case: dict[str, Any], status: str) -> dict[str, Any]:
+    return {
+        "raw_response_stored": False,
+        "parse_status": f"not_scored_{status}",
+        "contract_variant": contract["id"],
+        "native_contract_pass": False,
+        "normalizer_pass": False,
+        "semantic_pass": None,
+        "grounding_pass": None,
+        "citation_exact_pass": False,
+        "citation_claim_pass": None,
+        "safety_pass": None,
+        "manual_review_needed": True,
+        "extra_text": None,
+        "extra_keys": [],
+        "missing_keys": [],
+        "citation_format_error": None,
+        "source_id_copy_error": None,
+        "summary_length_chars": 0,
+        "normalized_summary": "",
+        "normalized_citations": [],
+        "required_sources_pass": False,
+        "required_sources_missing": sorted(str(item) for item in case.get("required_sources", [])),
+        "distractor_sources_pass": True,
+        "distractor_sources_used": [],
+        "phi_like_hits": [],
+        "failure_owner": "output_channel_policy",
+        "metric_risk_notes": ["answer was emitted outside final content channel"],
+    }
+
+
+def workflow_accept(cell: dict[str, Any]) -> bool:
+    manual_lanes = ("semantic_pass", "grounding_pass", "citation_claim_pass", "safety_pass")
+    return bool(
+        cell.get("api_status") == "ok"
+        and cell.get("normalizer_pass") is True
+        and cell.get("manual_review_needed") is False
+        and all(cell.get(lane) is True for lane in manual_lanes)
+        and cell.get("failure_owner") not in {"output_channel_policy", "PHI"}
+    )
+
+
+def quarantine_reason(cell: dict[str, Any]) -> str:
+    if cell.get("failure_owner") == "output_channel_policy":
+        return "reasoning_only_output"
+    if cell.get("failure_owner") == "PHI":
+        return "phi_like_output"
+    if cell.get("api_status") != "ok":
+        return "api_failure"
+    if cell.get("manual_review_needed") is not False:
+        return "manual_review_required"
+    if any(cell.get(lane) is not True for lane in ("semantic_pass", "grounding_pass", "citation_claim_pass", "safety_pass")):
+        return "manual_review_required"
+    if cell.get("normalizer_pass") is False:
+        return "validation_failed"
+    return "not_accepted"
+
+
 def validate_fixture(fixture: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     contracts = fixture.get("contracts", [])
@@ -421,16 +479,17 @@ def write_summary(out_dir: Path, payload: dict[str, Any]) -> Path:
         handle.write("- endpoint readiness: not assessed; no `/explain` call\n")
         handle.write("- raw responses: synthetic non-PHI calibration only\n\n")
         handle.write("- manual review lanes must be filled before viability decisions: `semantic_pass`, `grounding_pass`, `citation_claim_pass`, `safety_pass`\n\n")
-        handle.write("| model | case | contract | api | parse | native | normalizer | cite exact | required src | semantic | grounding | claim cite | safety | manual review | raw stored | failure owner |\n")
-        handle.write("|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n")
+        handle.write("| model | case | contract | api | channel | parse | native | normalizer | cite exact | required src | semantic | grounding | claim cite | safety | manual review | raw stored | failure owner | quarantine |\n")
+        handle.write("|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|\n")
         for model in payload.get("models", []):
             for cell in model.get("cells", []):
                 handle.write(
-                    "| {model} | {case} | {contract} | {api} | {parse} | {native} | {normalizer} | {cite} | {required} | {semantic} | {grounding} | {claim} | {safety} | {manual} | {raw} | {failure} |\n".format(
+                    "| {model} | {case} | {contract} | {api} | {channel} | {parse} | {native} | {normalizer} | {cite} | {required} | {semantic} | {grounding} | {claim} | {safety} | {manual} | {raw} | {failure} | {quarantine} |\n".format(
                         model=model.get("label"),
                         case=cell.get("case_id"),
                         contract=cell.get("contract_variant"),
                         api=cell.get("api_status"),
+                        channel=cell.get("output_channel_status", ""),
                         parse=cell.get("parse_status"),
                         native=cell.get("native_contract_pass"),
                         normalizer=cell.get("normalizer_pass"),
@@ -443,6 +502,7 @@ def write_summary(out_dir: Path, payload: dict[str, Any]) -> Path:
                         manual=cell.get("manual_review_needed"),
                         raw=cell.get("raw_response_stored"),
                         failure=cell.get("failure_owner", ""),
+                        quarantine=cell.get("quarantine_reason", ""),
                     )
                 )
     return path
@@ -462,8 +522,10 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], fixture: dict[str
     out_dir = result_dir(args.output_root, timestamp)
     raw_dir = out_dir / "raw_responses"
     prompt_dir = out_dir / "prompts"
+    reasoning_dir = out_dir / "reasoning_responses"
     raw_dir.mkdir(parents=True, exist_ok=True)
     prompt_dir.mkdir(parents=True, exist_ok=True)
+    reasoning_dir.mkdir(parents=True, exist_ok=True)
 
     pf = preflight(config)
     ok, reason = preflight_pass(config, pf)
@@ -528,16 +590,27 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], fixture: dict[str
                         }
                         response = call_chat_completion(server_url(runtime), str(model.get("served_model_id")), system, user, options)
                         text = str(response.get("text", ""))
-                        raw_hits = scan_phi_like(text)
+                        reasoning_text = str(response.get("reasoning_text", ""))
+                        raw_hits = scan_phi_like(text + "\n" + reasoning_text)
                         raw_path = raw_dir / f"{model['label']}__{case['id']}__{contract['id']}.txt"
+                        reasoning_path = reasoning_dir / f"{model['label']}__{case['id']}__{contract['id']}.txt"
                         raw_stored = False
+                        reasoning_stored = False
                         if raw_hits:
                             scoring = phi_redacted_scoring(raw_hits, contract)
                             payload["stopped_early"] = True
                             payload["stop_reason"] = "PHI-like output detected in raw response"
+                        elif response.get("output_channel_status") == "reasoning_only_output":
+                            if reasoning_text:
+                                reasoning_path.write_text(reasoning_text, encoding="utf-8", newline="\n")
+                                reasoning_stored = True
+                            scoring = output_channel_policy_scoring(contract, case, "reasoning_only_output")
                         else:
                             raw_path.write_text(text, encoding="utf-8", newline="\n")
                             raw_stored = True
+                            if reasoning_text:
+                                reasoning_path.write_text(reasoning_text, encoding="utf-8", newline="\n")
+                                reasoning_stored = True
                             scoring = normalize_output(text, contract, case) if response.get("status") == "ok" else {}
                         cell = {
                             "case_id": case["id"],
@@ -549,8 +622,24 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], fixture: dict[str
                             "error": response.get("error", ""),
                             "raw_response_path": str(raw_path) if raw_stored else "",
                             "raw_response_stored": raw_stored,
+                            "reasoning_response_path": str(reasoning_path) if reasoning_stored else "",
+                            "reasoning_response_stored": reasoning_stored,
+                            "output_channel_status": response.get("output_channel_status", ""),
+                            "extraction_channel": response.get("extraction_channel", ""),
+                            "content_chars": response.get("content_chars", 0),
+                            "reasoning_chars": response.get("reasoning_chars", 0),
+                            "message_keys": response.get("message_keys", []),
+                            "finish_reason": response.get("finish_reason"),
+                            "response_format_mode": contract.get("response_format", "none"),
+                            "retry_attempted": False,
+                            "retry_mode": "none",
+                            "workflow_accept": False,
+                            "quarantine_reason": "",
                         }
                         cell.update(scoring)
+                        cell["workflow_accept"] = workflow_accept(cell)
+                        if not cell["workflow_accept"]:
+                            cell["quarantine_reason"] = quarantine_reason(cell)
                         row["cells"].append(cell)
                         if payload["stopped_early"]:
                             break

@@ -426,12 +426,56 @@ def evaluate_semantic_lanes(
     l2_case: dict[str, Any],
     eval_case: dict[str, Any],
     eval_set: dict[str, Any],
+    output_channel_status: str = "content",
 ) -> dict[str, Any]:
     normalized = normalize_output(text)
     evidence_ids = source_ids_from_evidence(l2_case)
     policy = acceptable_set_for_case(l2_case, eval_case, eval_set)
     citation_score = score_citations(normalized["citations"], evidence_ids, policy)
     manual_review_needed = case_manual_review_needed(eval_case)
+    if output_channel_status == "reasoning_only_output":
+        return {
+            "lanes": {
+                "semantic_rag_lane": {
+                    "semantic_pass": False if not manual_review_needed else None,
+                    "grounding_pass": False,
+                    "citation_integrity": False,
+                    "safety_pass": None,
+                    "manual_review_needed": manual_review_needed,
+                    "failure_owner": "output_channel_policy",
+                },
+                "normalizer_lane": {
+                    "normalizer_pass": False,
+                    "normalizer_error": "answer was emitted only in reasoning channel",
+                    "extracted_summary": "",
+                    "extracted_citations": [],
+                },
+                "native_contract_lane": {
+                    "native_contract_pass": False,
+                    "parse_status": "not_scored_reasoning_only_output",
+                    "schema_error": "",
+                },
+                "real_endpoint_lane": {
+                    "endpoint_pass": None,
+                    "response_status": "not_run_l2_synthetic_only",
+                    "latency_ms": None,
+                    "verifier_result": "not_run_l2_synthetic_only",
+                    "PHI_zero_hit": None,
+                },
+            },
+            "citation_score": citation_score,
+            "r2_metric_hooks": {
+                "claim_count": None,
+                "claim_grounded_count": None,
+                "claim_grounding_score": None,
+                "retrieval_precision_at_k": None,
+                "retrieval_recall_proxy": None,
+                "response_completeness": "reasoning_only_output",
+                "case_metric_profile": l2_case.get("case_metric_profile"),
+                "metric_risk_notes": l2_case.get("metric_risk_notes", ""),
+            },
+            "normalized_output": normalized,
+        }
     safety_pass = not citation_score["placeholder_citations"] and not normalized["summary_has_placeholder"]
     grounding_pass = citation_score["citation_integrity"]
     semantic_pass = None if manual_review_needed else bool(normalized["summary"] and grounding_pass and safety_pass)
@@ -687,6 +731,46 @@ def response_format_payload(mode: str | None) -> dict[str, Any] | None:
     raise ValueError(f"unsupported response_format: {mode}")
 
 
+def extract_chat_message(parsed: dict[str, Any]) -> dict[str, Any]:
+    choices = parsed.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+    message = choice.get("message") if isinstance(choice, dict) else {}
+    if not isinstance(message, dict):
+        message = {}
+
+    content_value = message.get("content")
+    content_text = content_value if isinstance(content_value, str) else ""
+    reasoning_text = ""
+    for key in ("reasoning_content", "reasoning", "reasoning_text"):
+        value = message.get(key)
+        if isinstance(value, str) and value:
+            reasoning_text = value
+            break
+
+    if content_text.strip():
+        output_channel_status = "content"
+        extraction_channel = "content"
+    elif reasoning_text:
+        output_channel_status = "reasoning_only_output"
+        extraction_channel = "none"
+    else:
+        output_channel_status = "empty_content"
+        extraction_channel = "none"
+
+    return {
+        "text": content_text,
+        "content_text": content_text,
+        "reasoning_text": reasoning_text,
+        "output_channel_status": output_channel_status,
+        "extraction_channel": extraction_channel,
+        "content_chars": len(content_text),
+        "reasoning_chars": len(reasoning_text),
+        "message_keys": sorted(str(key) for key in message.keys()),
+        "finish_reason": choice.get("finish_reason") if isinstance(choice, dict) else None,
+        "raw_message": message,
+    }
+
+
 def call_chat_completion(server_url: str, model_id: str, system: str, user: str, options: dict[str, Any]) -> dict[str, Any]:
     url = openai_base_url(server_url) + "/chat/completions"
     payload: dict[str, Any] = {
@@ -717,18 +801,27 @@ def call_chat_completion(server_url: str, model_id: str, system: str, user: str,
         with urllib.request.urlopen(request, timeout=int(options.get("timeout_seconds", API_TIMEOUT_SEC))) as response:
             body = response.read().decode("utf-8")
         parsed = json.loads(body)
-        text = str(parsed.get("choices", [{}])[0].get("message", {}).get("content", "") or "")
+        message = extract_chat_message(parsed)
         return {
             "status": "ok",
-            "text": text,
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "usage": parsed.get("usage", {}),
+            **message,
         }
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         return {
             "status": "http_error",
             "text": "",
+            "content_text": "",
+            "reasoning_text": "",
+            "output_channel_status": "request_failed",
+            "extraction_channel": "none",
+            "content_chars": 0,
+            "reasoning_chars": 0,
+            "message_keys": [],
+            "finish_reason": None,
+            "raw_message": {},
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "error": f"HTTP {exc.code}: {body[:300]}",
         }
@@ -736,6 +829,15 @@ def call_chat_completion(server_url: str, model_id: str, system: str, user: str,
         return {
             "status": "request_error",
             "text": "",
+            "content_text": "",
+            "reasoning_text": "",
+            "output_channel_status": "request_failed",
+            "extraction_channel": "none",
+            "content_chars": 0,
+            "reasoning_chars": 0,
+            "message_keys": [],
+            "finish_reason": None,
+            "raw_message": {},
             "latency_ms": int((time.perf_counter() - started) * 1000),
             "error": f"{type(exc).__name__}: {exc}",
         }
@@ -807,12 +909,12 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
                 f"free_gib={free_space.get('free_gib')}\n"
             )
         handle.write("\n")
-        handle.write("| model | case | status | semantic | normalizer | native | core cite | strong cite | failure |\n")
-        handle.write("|---|---|---|---:|---:|---:|---:|---:|---|\n")
+        handle.write("| model | case | status | channel | semantic | normalizer | native | core cite | strong cite | failure |\n")
+        handle.write("|---|---|---|---|---:|---:|---:|---:|---:|---|\n")
         for row in payload.get("results", []):
             if not row.get("cases"):
                 handle.write(
-                    "| {model} | - | {status} | - | - | - | - | - | {failure} |\n".format(
+                    "| {model} | - | {status} | - | - | - | - | - | - | {failure} |\n".format(
                         model=row.get("model_label"),
                         status="error" if row.get("error") else "not_run",
                         failure=row.get("error") or "",
@@ -826,10 +928,11 @@ def write_outputs(payload: dict[str, Any], timestamp: str) -> tuple[Path, Path]:
                 native = lanes.get("native_contract_lane", {})
                 citation = case.get("citation_score", {})
                 handle.write(
-                    "| {model} | {case} | {status} | {semantic} | {normalizer} | {native} | {core} | {strong} | {failure} |\n".format(
+                    "| {model} | {case} | {status} | {channel} | {semantic} | {normalizer} | {native} | {core} | {strong} | {failure} |\n".format(
                         model=row.get("model_label"),
                         case=case.get("case_id"),
                         status=case.get("api_status"),
+                        channel=case.get("output_channel_status", ""),
                         semantic=semantic.get("semantic_pass"),
                         normalizer=normalizer.get("normalizer_pass"),
                         native=native.get("native_contract_pass"),
@@ -968,6 +1071,7 @@ def run_l2(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[str,
                 l2_case=l2_case,
                 eval_case=eval_case,
                 eval_set=eval_set,
+                output_channel_status=str(api.get("output_channel_status", "content")),
             )
             row["cases"].append(
                 {
@@ -976,6 +1080,12 @@ def run_l2(args: argparse.Namespace, config: dict[str, Any], eval_set: dict[str,
                     "api_status": api.get("status"),
                     "api_latency_ms": api.get("latency_ms"),
                     "usage": api.get("usage", {}),
+                    "output_channel_status": api.get("output_channel_status", ""),
+                    "extraction_channel": api.get("extraction_channel", ""),
+                    "content_chars": api.get("content_chars", 0),
+                    "reasoning_chars": api.get("reasoning_chars", 0),
+                    "message_keys": api.get("message_keys", []),
+                    "finish_reason": api.get("finish_reason"),
                     **scored,
                 }
             )

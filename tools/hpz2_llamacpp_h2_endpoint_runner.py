@@ -60,9 +60,20 @@ PHI_PATTERN_NAMES = [
 RETRIEVAL_QUERY_AUGMENTATION_FIELDS = [
     "context.age",
     "context.weight_kg",
+    "context.orders[]",
+    "context.order_details[].code",
     "context.order_details[].dose",
     "context.order_details[]._note",
 ]
+MANUAL_LANE_NAMES = ("semantic", "grounding", "citation_claim", "safety")
+ALLOWED_MANUAL_LANE_LABELS = {
+    "pass",
+    "partial",
+    "borderline",
+    "fail",
+    "pending",
+    "not_applicable",
+}
 
 
 class HarnessHardStop(RuntimeError):
@@ -175,12 +186,17 @@ def augment_h2_retrieval_query(base_query: str, context: dict[str, Any]) -> str:
     weight_kg = scalar_query_value(context.get("weight_kg"))
     if weight_kg:
         parts.extend([f"weight_kg {weight_kg}", f"{weight_kg}kg"])
+    orders = context.get("orders")
+    if isinstance(orders, list):
+        parts.extend(clean_query_fragment(order) for order in orders)
     for item in context.get("order_details", []) or []:
         if not isinstance(item, dict):
             continue
         code = clean_query_fragment(item.get("code"))
         dose = clean_query_fragment(item.get("dose"))
         note = clean_query_fragment(item.get("_note"))
+        if code:
+            parts.append(code)
         if dose:
             parts.append(f"{code} dose {dose}" if code else f"dose {dose}")
         if note:
@@ -220,6 +236,44 @@ def resolve_output_dir(value: str) -> Path:
     except ValueError as exc:
         raise RuntimeError(f"--output-dir must be under {output_root}") from exc
     return resolved
+
+
+def load_manual_lane_overrides(path: Path | None) -> dict[tuple[str, str], dict[str, Any]]:
+    if path is None:
+        return {}
+    payload = load_json(path)
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict):
+        entries = payload.get("manual_lanes", payload.get("cells", payload))
+    else:
+        entries = payload
+    if not isinstance(entries, list):
+        raise RuntimeError("manual lane file must be a list or contain manual_lanes/cells list")
+    overrides: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise RuntimeError(f"manual lane entry {index} must be an object")
+        model = str(entry.get("model") or entry.get("model_label") or "").strip()
+        case_id = str(entry.get("case_id") or entry.get("case") or "").strip()
+        if not model or not case_id:
+            raise RuntimeError(f"manual lane entry {index} missing model or case_id")
+        lanes: dict[str, str] = {}
+        missing = [name for name in MANUAL_LANE_NAMES if name not in entry]
+        if missing:
+            raise RuntimeError(f"manual lane entry {model}/{case_id} missing lanes: {', '.join(missing)}")
+        for name in MANUAL_LANE_NAMES:
+            value = str(entry.get(name) or "").strip()
+            if value not in ALLOWED_MANUAL_LANE_LABELS:
+                allowed = ", ".join(sorted(ALLOWED_MANUAL_LANE_LABELS))
+                raise RuntimeError(f"manual lane entry {model}/{case_id} has invalid {name}: {value!r}; allowed: {allowed}")
+            lanes[name] = value
+        lanes["note"] = str(entry.get("note") or "").strip()
+        key = (model, case_id)
+        if key in overrides:
+            raise RuntimeError(f"duplicate manual lane entry for {model}/{case_id}")
+        overrides[key] = lanes
+    return overrides
 
 
 def normalize_git_status_path(line: str) -> str:
@@ -889,6 +943,26 @@ def source_id_fidelity_meta(
     }
 
 
+def manual_lanes_pending(case: dict[str, Any]) -> bool:
+    lanes = case.get("manual_lanes")
+    if not isinstance(lanes, dict) or not lanes:
+        return False
+    return any(lanes.get(name) == "pending" for name in MANUAL_LANE_NAMES)
+
+
+def manual_lane_not_pass(case: dict[str, Any], name: str) -> bool:
+    lanes = case.get("manual_lanes")
+    if not isinstance(lanes, dict) or name not in lanes:
+        return False
+    return lanes.get(name) in {"partial", "borderline", "fail"}
+
+
+def content_lane_name(case: dict[str, Any]) -> str:
+    if isinstance(case.get("manual_lanes"), dict) and case.get("manual_lanes"):
+        return "content_rubric_signal"
+    return "content"
+
+
 def classify_failure_lanes(case: dict[str, Any]) -> list[str]:
     lanes: list[str] = []
     if case["phi_hit_count"] > 0:
@@ -915,8 +989,16 @@ def classify_failure_lanes(case: dict[str, Any]) -> list[str]:
         lanes.append("citation_selection")
     if case.get("citation_issues"):
         lanes.append("citation_returned_invalid")
+    if manual_lanes_pending(case):
+        lanes.append("manual_pending")
+    if manual_lane_not_pass(case, "safety"):
+        lanes.append("safety")
+    if manual_lane_not_pass(case, "citation_claim"):
+        lanes.append("citation_claim")
+    if manual_lane_not_pass(case, "semantic") or manual_lane_not_pass(case, "grounding"):
+        lanes.append("manual_content")
     if case.get("content_lane_pass") is False:
-        lanes.append("content")
+        lanes.append(content_lane_name(case))
     if case["emr_status"] != case["expected_status"]:
         lanes.append("status_mismatch")
     return lanes
@@ -938,12 +1020,20 @@ def classify_failure(case: dict[str, Any]) -> str:
         return "retrieval"
     if any(owner in lanes for owner in ("source_id_fidelity", "citation_selection", "citation_returned_invalid")):
         return "citation"
+    if "safety" in lanes:
+        return "safety"
+    if "citation_claim" in lanes:
+        return "citation"
+    if "manual_content" in lanes:
+        return "content"
+    if "manual_pending" in lanes:
+        return "manual_pending"
     policy_pass = case.get("citation_policy", {}).get("policy_pass")
     if policy_pass is False:
         return "citation"
     if case.get("expected_citations_missing") and policy_pass is not True:
         return "citation"
-    if case.get("content_lane_pass") is False:
+    if "content" in lanes:
         return "content"
     if case["emr_status"] != case["expected_status"]:
         return "unknown"
@@ -967,6 +1057,38 @@ def manual_lanes_summary(case: dict[str, Any]) -> str:
         return "-"
     lane_names = ("semantic", "grounding", "citation_claim", "safety")
     return "/".join(f"{name}:{lanes.get(name) or '-'}" for name in lane_names)
+
+
+def source_id_near_miss_summary(case: dict[str, Any]) -> str:
+    fidelity = case.get("source_id_fidelity") or {}
+    near_misses = fidelity.get("near_miss_mutations") or []
+    if not isinstance(near_misses, list) or not near_misses:
+        return "-"
+    summaries: list[str] = []
+    for item in near_misses:
+        if not isinstance(item, dict):
+            continue
+        raw = str(item.get("raw") or "").strip()
+        canonical = str(item.get("canonical") or "").strip()
+        if raw and canonical:
+            summaries.append(f"{raw}->{canonical}")
+    return ",".join(summaries) or "-"
+
+
+def manual_pending_count(cases: list[dict[str, Any]]) -> int:
+    return sum(1 for case in cases if manual_lanes_pending(case))
+
+
+def apply_manual_lane_override(
+    row: dict[str, Any],
+    model_label: str,
+    overrides: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    lanes = overrides.get((model_label, str(row.get("case_id", ""))))
+    if not lanes:
+        return
+    row["manual_lanes"] = dict(lanes)
+    row["manual_review_needed"] = manual_lanes_pending(row)
 
 
 def phi_pattern_hits(text: str, phi_patterns: list[Any]) -> list[str]:
@@ -1104,6 +1226,7 @@ def run_harness_for_model(
     eval_set: dict[str, Any],
     *,
     store_replay_responses: bool = False,
+    manual_lane_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     os.environ.update(
         {
@@ -1300,6 +1423,7 @@ def run_harness_for_model(
                 "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
             }
             row.update(content_lane_meta(case, trace, llm_called=llm_called))
+            apply_manual_lane_override(row, model_label, manual_lane_overrides or {})
             row["failure_lanes"] = classify_failure_lanes(row)
             row["failure_owner"] = classify_failure(row)
             results.append(row)
@@ -1339,25 +1463,54 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
             handle.write(
                 f"- retrieval_query_augmentation: enabled; fields={','.join(retrieval_aug.get('fields') or [])}\n"
             )
+        manual_overlay = payload.get("manual_lane_overlay") or {}
+        if is_c1_replay:
+            handle.write(
+                f"- manual_lane_overlay: enabled={manual_overlay.get('enabled', False)} "
+                f"entries={manual_overlay.get('entry_count', 0)}\n"
+            )
         handle.write(raw_line)
-        handle.write("| model | cases | http 200 | ok | valid json | strict schema | structural drift | citation issue | content pass | content missing | content not scored | phi hits | unexpected calls |\n")
-        handle.write("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+        columns = [
+            "model",
+            "cases",
+            "http 200",
+            "ok",
+            "valid json",
+            "strict schema",
+            "structural drift",
+            "citation issue",
+            "content pass",
+            "content missing",
+            "content not scored",
+            "phi hits",
+            "unexpected calls",
+        ]
+        if is_c1_replay:
+            columns.append("manual pending")
+        handle.write("| " + " | ".join(columns) + " |\n")
+        handle.write("|---" + "|---:" * (len(columns) - 1) + "|\n")
         for model in payload["models"]:
             cases = model.get("cases", [])
             model_call_cases = [c for c in cases if c.get("model_call_expected")]
+            values = [
+                model["label"],
+                len(cases),
+                sum(1 for c in cases if c.get("http_status") == 200),
+                sum(1 for c in cases if c.get("emr_status") == "ok"),
+                sum(1 for c in model_call_cases if c.get("valid_json") is True),
+                sum(1 for c in model_call_cases if c.get("strict_schema") is True),
+                sum(1 for c in model_call_cases if c.get("structural_drift")),
+                sum(1 for c in cases if has_citation_issue(c)),
+                sum(1 for c in cases if c.get("content_lane_pass") is True),
+                sum(1 for c in cases if c.get("content_lane_pass") is False),
+                sum(1 for c in cases if c.get("content_lane_pass") is None),
+                sum(int(c.get("phi_hit_count") or 0) for c in cases),
+                sum(1 for c in cases if c.get("llm_called") and not c.get("model_call_expected")),
+            ]
+            if is_c1_replay:
+                values.append(manual_pending_count(cases))
             handle.write(
-                f"| {model['label']} | {len(cases)} | "
-                f"{sum(1 for c in cases if c.get('http_status') == 200)} | "
-                f"{sum(1 for c in cases if c.get('emr_status') == 'ok')} | "
-                f"{sum(1 for c in model_call_cases if c.get('valid_json') is True)} | "
-                f"{sum(1 for c in model_call_cases if c.get('strict_schema') is True)} | "
-                f"{sum(1 for c in model_call_cases if c.get('structural_drift'))} | "
-                f"{sum(1 for c in cases if has_citation_issue(c))} | "
-                f"{sum(1 for c in cases if c.get('content_lane_pass') is True)} | "
-                f"{sum(1 for c in cases if c.get('content_lane_pass') is False)} | "
-                f"{sum(1 for c in cases if c.get('content_lane_pass') is None)} | "
-                f"{sum(int(c.get('phi_hit_count') or 0) for c in cases)} | "
-                f"{sum(1 for c in cases if c.get('llm_called') and not c.get('model_call_expected'))} |\n"
+                "| " + " | ".join(str(value) for value in values) + " |\n"
             )
         handle.write("\n## Case Metadata\n\n")
         for model in payload["models"]:
@@ -1382,6 +1535,7 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                     f"policy_select={case.get('citation_policy_selection_pass')} "
                     f"policy_pass={case.get('citation_policy', {}).get('policy_pass')} "
                     f"sid={case.get('source_id_fidelity', {}).get('source_id_fidelity_lane_status', '-')} "
+                    f"sid_near={source_id_near_miss_summary(case)} "
                     f"lanes={','.join(case.get('failure_lanes') or []) or '-'} "
                     f"phi={case['phi_hit_count']} "
                     f"phi_blocking={','.join(case.get('phi_scan_blocking_hit_fields') or []) or '-'} "
@@ -1404,6 +1558,7 @@ def main() -> int:
     parser.add_argument("--primary4-c1-replay", action="store_true")
     parser.add_argument("--allow-approved-runner-worktree", action="store_true")
     parser.add_argument("--output-dir", default="")
+    parser.add_argument("--manual-lanes-file", default="")
     args = parser.parse_args()
     if not (
         args.confirm_phase2_heavy_run
@@ -1434,6 +1589,10 @@ def main() -> int:
     RESULT_DIR.mkdir(parents=True, exist_ok=False)
     LOCK_PATH = RESULT_DIR / "run.lock"
     acquire_lock()
+
+    if args.manual_lanes_file and not args.confirm_h2_c1_endpoint_replay:
+        raise RuntimeError("--manual-lanes-file is only allowed with --confirm-h2-c1-endpoint-replay")
+    manual_lane_overrides = load_manual_lane_overrides(Path(args.manual_lanes_file)) if args.manual_lanes_file else {}
 
     config = load_json(CONFIG_PATH)
     eval_set = load_json(EVAL_SET_PATH)
@@ -1487,6 +1646,10 @@ def main() -> int:
         ),
         "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
         "raw_model_responses_stored": bool(args.confirm_h2_c1_endpoint_replay),
+        "manual_lane_overlay": {
+            "enabled": bool(manual_lane_overrides),
+            "entry_count": len(manual_lane_overrides),
+        },
         "selected_models": model_labels,
         "selected_cases": [str(case.get("id", "")) for case in cases],
         "preflight": preflight,
@@ -1523,6 +1686,7 @@ def main() -> int:
                 cases,
                 eval_set,
                 store_replay_responses=args.confirm_h2_c1_endpoint_replay,
+                manual_lane_overrides=manual_lane_overrides,
             )
             print(f"DONE {label}", flush=True)
         except Exception as exc:

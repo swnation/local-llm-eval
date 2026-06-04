@@ -57,7 +57,10 @@ class H2EndpointRunnerTests(unittest.TestCase):
                             "citation_policy_reachability_pass": True,
                             "citation_policy_selection_pass": True,
                             "citation_policy": {"policy_pass": True},
-                            "source_id_fidelity": {"source_id_fidelity_lane_status": "pass"},
+                            "source_id_fidelity": {
+                                "source_id_fidelity_lane_status": "pass",
+                                "near_miss_mutations": [],
+                            },
                             "failure_lanes": [],
                             "phi_hit_count": 0,
                             "phi_scan_blocking_hit_fields": [],
@@ -143,6 +146,8 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["semantic"], "pending")
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["note"], "")
         self.assertIn("retrieval_query_augmentation: enabled", markdown)
+        self.assertIn("manual pending", markdown)
+        self.assertIn("sid_near=-", markdown)
         self.assertIn("manual_review=True", markdown)
         self.assertIn(
             "manual=semantic:pending/grounding:pending/citation_claim:pending/safety:pending",
@@ -180,6 +185,20 @@ class H2EndpointRunnerTests(unittest.TestCase):
             [{"raw": "rule_module:bst", "canonical": "rule:module:bst", "kind": "underscore_to_colon"}],
         )
         self.assertFalse(meta["source_id_fidelity_exact_pass"])
+
+    def test_source_id_near_miss_summary_formats_mutations(self):
+        self.assertEqual(
+            runner.source_id_near_miss_summary(
+                {
+                    "source_id_fidelity": {
+                        "near_miss_mutations": [
+                            {"raw": "rule_module:bst", "canonical": "rule:module:bst"}
+                        ]
+                    }
+                }
+            ),
+            "rule_module:bst->rule:module:bst",
+        )
 
     def test_citation_reachability_splits_not_retrieved_and_not_cited(self):
         meta = runner.citation_reachability_meta(
@@ -423,12 +442,14 @@ class H2EndpointRunnerTests(unittest.TestCase):
             {
                 "age": 3,
                 "weight_kg": 15.0,
+                "orders": ["dexisy", "typow"],
                 "order_details": [
                     {
                         "code": "dexisy",
                         "dose": "6.5mL TID",
                         "_note": "15kg; BW 범위 최소값 정렬",
-                    }
+                    },
+                    {"code": "sme"},
                 ],
             },
         )
@@ -439,6 +460,70 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertIn("15kg", query)
         self.assertIn("dexisy dose 6.5mL TID", query)
         self.assertIn("dexisy 15kg; BW 범위 최소값 정렬", query)
+        self.assertIn("typow", query)
+        self.assertIn("sme", query)
+
+    def test_manual_lane_overlay_can_finalize_c1_rubric_signal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "manual_lanes.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "manual_lanes": [
+                            {
+                                "model": "model-a",
+                                "case_id": "ra-03",
+                                "semantic": "pass",
+                                "grounding": "pass",
+                                "citation_claim": "pass",
+                                "safety": "pass",
+                                "note": "reviewed",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            overrides = runner.load_manual_lane_overrides(path)
+        row = self._manual_lane_payload("c1_endpoint_replay")["models"][0]["cases"][0]
+        row["content_lane_pass"] = False
+        runner.apply_manual_lane_override(row, "model-a", overrides)
+        row["failure_lanes"] = runner.classify_failure_lanes(row)
+        self.assertFalse(row["manual_review_needed"])
+        self.assertEqual(row["manual_lanes"]["note"], "reviewed")
+        self.assertIn("content_rubric_signal", row["failure_lanes"])
+        self.assertNotIn("manual_pending", row["failure_lanes"])
+        self.assertEqual(runner.classify_failure(row), "")
+
+    def test_manual_lane_overlay_rejects_invalid_label(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "manual_lanes.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "model": "model-a",
+                            "case_id": "ra-03",
+                            "semantic": "weak",
+                            "grounding": "pass",
+                            "citation_claim": "pass",
+                            "safety": "pass",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(RuntimeError):
+                runner.load_manual_lane_overrides(path)
+
+    def test_c1_pending_manual_lanes_block_owner_without_overstating_content(self):
+        row = self._manual_lane_payload("c1_endpoint_replay")["models"][0]["cases"][0]
+        row["content_lane_pass"] = False
+        row["failure_lanes"] = runner.classify_failure_lanes(row)
+        self.assertIn("manual_pending", row["failure_lanes"])
+        self.assertIn("content_rubric_signal", row["failure_lanes"])
+        self.assertNotIn("content", row["failure_lanes"])
+        self.assertEqual(runner.classify_failure(row), "manual_pending")
 
     def test_run_harness_restores_emr_monkeypatches_on_hard_stop(self):
         original_generate = lambda **kwargs: {"status": "ok", "text": "{}"}

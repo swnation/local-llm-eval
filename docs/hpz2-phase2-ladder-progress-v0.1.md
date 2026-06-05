@@ -158,7 +158,9 @@ Append new result entries below. Keep old entries intact.
   - source API status: all installed LLM/embedding repos OK
   - official LLM count: 4
   - high-trust Unsloth LLM count: 9
-  - all resolved LLM folders <= 71 GiB: true
+  - all resolved LLM folders <= 71 GiB: true at the 2026-05-25 inventory
+    checkpoint; superseded as a future-entry cutoff on 2026-06-06 by
+    model-specific fit preflight and explicit user approval
   - largest resolved folder: `openai/gpt-oss-120b` at 59.03 GiB
   - shared `qwen3.6-35b-a3b-mtp` repo folder: 58.74 GiB
   - cleanup/download/test: none

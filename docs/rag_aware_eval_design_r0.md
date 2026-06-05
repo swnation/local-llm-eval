@@ -124,7 +124,7 @@ L0/L1 결과는 `C:\github\hpz2-run-artifacts\results\l0_l1_inventory_20260525_2
 | embedding count | 1 |
 | source API check | all OK |
 | source trust split | 4 official LLMs / 9 high-trust Unsloth LLMs |
-| disk policy | all resolved LLM folders <= 71 GiB |
+| disk policy | all resolved LLM folders <= 71 GiB at the 2026-05-25 inventory checkpoint; not a future hard cutoff after 2026-06-06. Future large-model entry uses model-specific fit preflight and explicit user approval. |
 
 Model-axis catalog for L2 planning:
 

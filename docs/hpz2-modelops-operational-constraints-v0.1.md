@@ -50,7 +50,7 @@ execution-only.
 | EMR repo | no `EMR_AI_24clinic` writes without explicit user GO |
 | Commit/push | separate explicit GO only |
 | Disk floor | keep `C:` free space >= 100 GB after each cleanup/download/test step |
-| Large model size | models requiring more than about 71 GB on disk are low priority unless there is a strong reason and explicit user approval |
+| Large model size | no fixed 71 GB cutoff; large models need model-specific fit preflight and explicit user approval based on quant, active params, backend support, disk, RAM, and KV-cache risk |
 | Source trust | prefer official publisher models and high-trust GGUF distributors such as Unsloth |
 | Result interpretation | semantic-first; strict JSON/native contract failure is not the whole model verdict |
 
@@ -99,7 +99,8 @@ practical on HP Z2:
 
 Deprioritize:
 
-- 70B+ variants whose local footprint exceeds about 71 GB.
+- 70B+ variants with no plausible fit path after quant, backend, disk, RAM,
+  and KV-cache preflight.
 - duplicate families where a smaller or faster quant already gives comparable
   semantic results.
 - models that are only strict-contract convenient but semantically weak.
@@ -117,7 +118,7 @@ It is useful for planning, but must be refreshed with `lms ls` before execution.
 
 | Model key | Publisher | Params | Quant | Size GiB | Architecture | Initial treatment |
 |---|---|---:|---|---:|---|---|
-| `openai/gpt-oss-120b` | openai | 120B | MXFP4 | 59.03 | gpt-oss | high-priority large semantic candidate; below 71 GB |
+| `openai/gpt-oss-120b` | openai | 120B | MXFP4 | 59.03 | gpt-oss | high-priority large semantic candidate; plausible under model-specific fit preflight |
 | `qwen3.5-122b-a10b-mtp` | unsloth | 122B-A10B | Q3_K_M | 54.20 | qwen35moe | preserve for MTP/MoE comparison unless disk floor forces review |
 | `qwen3.5-122b-a10b` | unsloth | 122B-A10B | Q3_K_M | 52.55 | qwen35moe | compare only if MTP sibling does not dominate |
 | `llama-3.3-70b-instruct` | unsloth | 70B | Q4_K_M | 39.60 | llama | slow but useful 70B baseline |
@@ -203,7 +204,8 @@ recoverability, native contract convenience, and endpoint readiness.
 Given the current direction:
 
 - treat `gpt-oss-120b` as a serious semantic candidate because its MXFP4
-  footprint is under the user's approximate 71 GB practicality limit;
+  quant and active-runtime profile make it plausible under model-specific fit
+  preflight; do not use the old 71 GB footprint heuristic as a hard cutoff;
 - keep MTP/MoE candidates in scope because their active-parameter and speed
   profiles may be materially better than dense 70B+ baselines;
 - do not keep a model solely because it emits strict JSON;

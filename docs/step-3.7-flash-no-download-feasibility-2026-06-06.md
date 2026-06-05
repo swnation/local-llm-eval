@@ -4,6 +4,7 @@ project: local-llm-eval
 type: feasibility-memo
 status: draft
 created: 2026-06-06
+updated: 2026-06-06
 scope: Main PC no-download feasibility review for StepFun Step-3.7-Flash as a separate HP Z2 large-MoE side track
 related:
   - docs/hpz2-modelops-operational-constraints-v0.1.md
@@ -45,10 +46,17 @@ conditional path:
 ```text
 Main PC no-download memo
   -> HP Z2 no-download fit preflight
+  -> StepFun branch/build preflight
   -> quant selection review
   -> explicit download GO
   -> dry-load / tiny synthetic smoke
 ```
+
+2026-06-06 HP no-download fit preflight result: HP resource state supports
+continuing the side track, but not with `Q3_K_M` as the first dry-load target.
+The first realistic load-feasibility probe is now `IQ3_XXS`, conditional on a
+separate StepFun llama.cpp branch/build preflight. `Q3_K_M` and larger quants
+should be deferred until a smaller quant proves the runtime path.
 
 ## Source Snapshot
 
@@ -91,9 +99,53 @@ backend quirks.
 | Q4_K_S | 112 GB | high-pressure candidate only after smaller quant success | Official balanced quant, but the source lists about 7 GB runtime overhead and 120 GB minimum unified/VRAM for the Q4-class path. HP margin may be too small once OS/KV/cache are counted. |
 | IQ4_XS | 105 GB | high-pressure candidate only after smaller quant success | Slightly smaller than Q4_K_S; still close to the 128GB-class edge. |
 | Q3_K_L | 103 GB | high-pressure candidate only after smaller quant success | Aggressive size reduction but still near Q4-class pressure. |
-| Q3_K_M | 94 GB | preferred first useful-quality candidate if HP fit preflight passes | Official card frames it for single 64-96 GB device class with expected modest quality loss. It is the first quant that looks plausibly testable while preserving more quality than IQ3_XXS. |
-| IQ3_XXS | 76 GB | smallest-footprint feasibility candidate | Best fit probe if memory or disk margin is tight, but quality loss risk is higher. Use it to answer "can this class load/run at all," not to rank final quality. |
+| Q3_K_M | 94 GB | deferred / too tight for first dry-load after HP preflight | File size is about 87.4 GiB binary before runtime and KV overhead. Against the observed 90.96 GiB Vulkan budget, the remaining margin is too small for a first probe. Revisit only after a smaller quant proves the path. |
+| IQ3_XXS | 76 GB | conditional first load-feasibility probe | File size is about 70.6 GiB binary. It has the best first-fit margin under the observed HP Vulkan budget, but should answer only "can this class load/run at all," not final quality. |
 | mmproj F16 | 4 GB | skip for first text-only smoke | `/explain` evaluation is text-only. Vision projector is unnecessary for the first local feasibility pass. |
+
+## HP Z2 No-Download Fit Preflight Result
+
+Preflight date: 2026-06-06. Host access used `ssh test@192.168.68.50`; the
+`hpcheck` alias timed out. Scope stayed no-download and no-execution: no model
+weights were downloaded, no model was loaded, no dry-load was attempted, no
+`/explain` call was made, and no EMR or artifact repo write was performed.
+
+Observed HP state:
+
+- Machine: `HP Z2 Mini G1a Workstation Desktop PC`.
+- Windows visible RAM after the 96 GB VRAM allocation: total `31.78 GiB`,
+  free `20.07 GiB`.
+- GPU: `AMD Radeon(TM) 8060S Graphics`, integrated Vulkan device.
+- Vulkan device-local heap: size `95.75 GiB`, budget `90.96 GiB`, usage `0`.
+- Disk free: C: `589.30 GiB`, D: `346.06 GiB`, E: `953.74 GiB`.
+- `lms ps --json` returned `[]`; no LM Studio model was loaded.
+- LM Studio server was listening on port `1234` with PID `45180`.
+- Ports `18080` and `18081` had no listeners.
+- No stale `llama-server` or shim process was found.
+- HP `local-llm-eval` checkout was clean/synced at `f4869d6`; it was not
+  pulled during this gate.
+
+Runtime evidence:
+
+- Existing local llama.cpp runtime:
+  `C:\Github\llama-cpp-runtime\b9333\llama-server.exe`, version
+  `9333 (35c9b1f39)`.
+- LM Studio Vulkan backends inspected: 2.16.0 build `5306f4b` and 2.18.0 build
+  `06d26df`.
+- `C:\Github\llama-cpp-runtime` is not a git repo, and no checked StepFun
+  branch/source checkout was found in the inspected paths.
+
+Fit verdict:
+
+- Disk capacity: PASS.
+- Loaded-model/process/port state: PASS.
+- 96 GB VRAM allocation premise: PASS by live Vulkan heap evidence.
+- `Q3_K_M`: DEFER / too tight for first dry-load under the observed
+  `90.96 GiB` device-local budget.
+- `IQ3_XXS`: CONDITIONAL first candidate after StepFun branch/build preflight.
+- `Q4_K_S`, `IQ4_XS`, and `Q3_K_L`: not first candidates under the current
+  heap budget.
+- StepFun llama.cpp branch/build support on HP remains `needs evidence`.
 
 ## HP Z2 Fit Considerations
 
@@ -126,19 +178,24 @@ work unchanged. Step-3.7-Flash needs its own fit preflight because:
    - No HP command, no download, no model execution.
 
 3. `HP Z2 local-llm-eval Step-3.7-Flash no-download fit preflight GO`
-   - Use the standing HP hardware baseline: 128 GB RAM, 96 GB VRAM allocation.
-   - Verify current HP free disk, free RAM, loaded-model state, ports/processes,
-     current llama.cpp baseline, and whether the StepFun branch/build path is
-     required.
-   - Do not download weights and do not run a model.
+   - DONE on 2026-06-06.
+   - Result: HP resource state allows continuing, but `Q3_K_M` is too tight as
+     the first dry-load target. `IQ3_XXS` is the conditional first probe.
+   - StepFun branch/build support remains `needs evidence`.
 
-4. `Main PC local-llm-eval Step-3.7-Flash quant selection review GO`
-   - Choose between `Q3_K_M` and `IQ3_XXS` for a first dry-load.
-   - Default recommendation after a clean HP fit preflight: `Q3_K_M`.
-   - If fit margin is tight: `IQ3_XXS` as load-feasibility probe only.
+4. `HP Z2 local-llm-eval Step-3.7-Flash StepFun llama.cpp branch/build preflight GO`
+   - Verify whether the StepFun llama.cpp branch can be obtained/built or
+     otherwise matched by an existing runtime.
+   - No model download and no model execution.
 
-5. Later, only after explicit user approval:
-   `HP Z2 local-llm-eval Step-3.7-Flash <quant> dry-load GO`
+5. `Main PC local-llm-eval Step-3.7-Flash quant selection review GO`
+   - Current default after HP preflight: `IQ3_XXS` as load-feasibility probe
+     only.
+   - Reconsider `Q3_K_M` only after StepFun branch/build evidence and a smaller
+     quant path succeed.
+
+6. Later, only after explicit user approval:
+   `HP Z2 local-llm-eval Step-3.7-Flash IQ3_XXS dry-load GO`
    - This would be the first gate that downloads a selected quant and attempts
      dry-load/tiny synthetic smoke.
 

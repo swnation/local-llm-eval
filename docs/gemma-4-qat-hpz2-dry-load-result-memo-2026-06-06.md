@@ -205,8 +205,9 @@ D: free: 362.57 GiB
 E: free: 953.74 GiB
 ```
 
-No HP `C:\Github\memory` edit was made. The result was summarized into the Main
-PC relay and backed up separately through the common librarian pass.
+No HP `C:\Github\memory` edit was made. The HP result was summarized into the
+Main PC relay before this repo memo was drafted; backing up this repo memo and
+the follow-up relay state remains a separate Main PC librarian gate.
 
 ## Boundaries
 
@@ -223,16 +224,10 @@ This result does not authorize:
 
 ## Suggested Next Gates
 
-Review this memo first:
+Back up the repo-backed memo and follow-up relay state:
 
 ```text
-Main PC local-llm-eval Gemma 4 QAT HP dry-load result memo review GO
-```
-
-If accepted, persist it:
-
-```text
-Main PC local-llm-eval Gemma 4 QAT HP dry-load result memo commit GO
+Main PC local-llm-eval librarian pass GO
 ```
 
 Runtime continuation after repo-backed memo or explicit skip:

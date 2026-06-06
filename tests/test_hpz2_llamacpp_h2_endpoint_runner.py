@@ -30,6 +30,7 @@ class H2EndpointRunnerTests(unittest.TestCase):
             "stopped_early": False,
             "stop_reason": "",
             "retrieval_query_augmentation": runner.retrieval_query_augmentation_meta(),
+            "retrieval_policy": runner.retrieval_policy_meta(runner.C1_RETRIEVAL_POLICY_DEFAULT),
             "models": [
                 {
                     "label": "model-a",
@@ -74,6 +75,16 @@ class H2EndpointRunnerTests(unittest.TestCase):
                                 "safety": "pending",
                                 "note": "",
                             },
+                            "retrieval_policy_id": runner.C1_RETRIEVAL_POLICY_DEFAULT,
+                            "retrieval_options_effective": {
+                                "top_k": 5,
+                                "min_similarity": 0.45,
+                                "lexical_rerank": False,
+                            },
+                            "retrieved_expected_hit_at_5": {"source_ids": ["kb:pediatric-age-sme"]},
+                            "retrieved_expected_hit_at_10": {"source_ids": ["kb:pediatric-age-sme"]},
+                            "retrieved_expected_but_not_cited": [],
+                            "ra03_source_index_hygiene_unresolved": False,
                             "failure_owner": "",
                         }
                     ],
@@ -146,6 +157,10 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["semantic"], "pending")
         self.assertEqual(payload["models"][0]["cases"][0]["manual_lanes"]["note"], "")
         self.assertIn("retrieval_query_augmentation: enabled", markdown)
+        self.assertIn("retrieval_policy: id=eval_default_top5", markdown)
+        self.assertIn("effective_top_k=5", markdown)
+        self.assertIn("hit5=1", markdown)
+        self.assertIn("hit10=1", markdown)
         self.assertIn("manual pending", markdown)
         self.assertIn("sid_near=-", markdown)
         self.assertIn("manual_review=True", markdown)
@@ -462,6 +477,47 @@ class H2EndpointRunnerTests(unittest.TestCase):
         self.assertIn("dexisy 15kg; BW 범위 최소값 정렬", query)
         self.assertIn("typow", query)
         self.assertIn("sme", query)
+
+    def test_default_retrieval_policy_keeps_eval_payload_top_k(self):
+        payload = {"options": {"top_k": 5, "min_similarity": 0.45, "lexical_rerank": False}}
+        meta = runner.apply_retrieval_policy_to_payload(payload, runner.C1_RETRIEVAL_POLICY_DEFAULT)
+        self.assertEqual(payload["options"]["top_k"], 5)
+        self.assertEqual(meta["retrieval_options_original"]["top_k"], 5)
+        self.assertEqual(meta["retrieval_options_effective"]["top_k"], 5)
+        self.assertEqual(EVAL_SET["common_options_default"]["top_k"], 5)
+
+    def test_c1_top10_retrieval_policy_overrides_payload_only(self):
+        payload = {"options": {"top_k": 5, "min_similarity": 0.45, "lexical_rerank": False}}
+        meta = runner.apply_retrieval_policy_to_payload(payload, runner.C1_RETRIEVAL_POLICY_TOP10)
+        self.assertEqual(payload["options"]["top_k"], 10)
+        self.assertEqual(meta["retrieval_policy_id"], "h2_c1_current_aug_top10_v0")
+        self.assertEqual(meta["retrieval_options_original"]["top_k"], 5)
+        self.assertEqual(meta["retrieval_options_effective"]["top_k"], 10)
+        self.assertEqual(EVAL_SET["common_options_default"]["top_k"], 5)
+
+    def test_retrieval_policy_diagnostics_splits_hit_at_5_and_10(self):
+        diagnostics = runner.retrieval_policy_diagnostics(
+            "RA-07-umk-uri-syrup-age-insurance",
+            expected_source_ids=["rule:drug:umk", "kb:adult-lineup"],
+            retrieved_source_ids=["rule:drug:umk", "other1", "other2", "other3", "other4", "kb:adult-lineup"],
+            returned_source_ids=["rule:drug:umk"],
+        )
+        self.assertEqual(diagnostics["expected_source_rank"]["kb:adult-lineup"], 6)
+        self.assertEqual(diagnostics["retrieved_expected_hit_at_5"]["source_ids"], ["rule:drug:umk"])
+        self.assertEqual(
+            diagnostics["retrieved_expected_hit_at_10"]["source_ids"],
+            ["rule:drug:umk", "kb:adult-lineup"],
+        )
+        self.assertEqual(diagnostics["retrieved_expected_but_not_cited"], ["kb:adult-lineup"])
+
+    def test_ra03_sme_gap_is_reported_as_source_hygiene(self):
+        diagnostics = runner.retrieval_policy_diagnostics(
+            "RA-03-safety-boundary",
+            expected_source_ids=["kb:age-sme"],
+            retrieved_source_ids=["kb:age-sme"],
+            returned_source_ids=["kb:age-sme"],
+        )
+        self.assertTrue(diagnostics["ra03_source_index_hygiene_unresolved"])
 
     def test_manual_lane_overlay_can_finalize_c1_rubric_signal(self):
         with tempfile.TemporaryDirectory() as tmp:

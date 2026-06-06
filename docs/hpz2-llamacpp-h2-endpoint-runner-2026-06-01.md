@@ -66,6 +66,23 @@ Default C1 replay is an 8-call pilot: Qwen official + Granite x
 `RA-07-umk-uri-syrup-age-insurance`. Use `--primary4-c1-replay` only after the
 pilot is reviewed.
 
+The default C1 replay keeps the eval payload retrieval options unchanged
+(`top_k=5`, `min_similarity=0.45`, `lexical_rerank=false`). To run the scoped
+C1 top-10 retrieval-policy experiment from the 2026-06-06 query policy plan,
+use the named policy flag:
+
+```powershell
+C:\Github\EMR_AI_24clinic\.venv\Scripts\python.exe `
+  tools\hpz2_llamacpp_h2_endpoint_runner.py `
+  --confirm-h2-c1-endpoint-replay `
+  --retrieval-policy h2_c1_current_aug_top10_v0
+```
+
+This policy keeps the existing H2 retrieval query augmentation and changes only
+the C1 replay request payload `options.top_k` to `10`. It does not mutate the
+eval JSON defaults, does not use expected source IDs to construct the live
+query, and does not make top-10 retrieval a pass criterion by itself.
+
 ## Dirty-Worktree Policy
 
 Default behavior is to reject dirty `local-llm-eval` and dirty
@@ -126,6 +143,21 @@ supplement. It records manual-review metadata and stores endpoint response
 bodies plus raw LLM JSON text only for the selected synthetic replay cells,
 after PHI scanning. It does not change `EMR_AI_24clinic` code or production
 prompts.
+
+For each C1 cell, the runner records retrieval-policy metadata and diagnostics:
+
+- `retrieval_policy_id`
+- `retrieval_options_original`
+- `retrieval_options_effective`
+- `expected_source_rank`
+- `retrieved_expected_hit_at_5`
+- `retrieved_expected_hit_at_10`
+- `expected_source_not_retrieved`
+- `retrieved_expected_but_not_cited`
+- `ra03_source_index_hygiene_unresolved`
+
+`ra03_source_index_hygiene_unresolved` is a diagnostic lane for the optional
+`rule:drug:sme` source in RA-03, not a C1 pass/fail criterion.
 
 Primary output files are:
 

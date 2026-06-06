@@ -74,6 +74,22 @@ ALLOWED_MANUAL_LANE_LABELS = {
     "pending",
     "not_applicable",
 }
+C1_RETRIEVAL_POLICY_DEFAULT = "eval_default_top5"
+C1_RETRIEVAL_POLICY_TOP10 = "h2_c1_current_aug_top10_v0"
+C1_RETRIEVAL_POLICIES = {
+    C1_RETRIEVAL_POLICY_DEFAULT: {
+        "policy_id": C1_RETRIEVAL_POLICY_DEFAULT,
+        "query_policy": "h2_current_aug",
+        "top_k_policy": "eval_payload",
+        "top_k_override": None,
+    },
+    C1_RETRIEVAL_POLICY_TOP10: {
+        "policy_id": C1_RETRIEVAL_POLICY_TOP10,
+        "query_policy": "h2_current_aug",
+        "top_k_policy": "c1_endpoint_replay_override",
+        "top_k_override": 10,
+    },
+}
 
 
 class HarnessHardStop(RuntimeError):
@@ -209,6 +225,48 @@ def retrieval_query_augmentation_meta() -> dict[str, Any]:
         "enabled": True,
         "scope": "H2 endpoint runner only",
         "fields": RETRIEVAL_QUERY_AUGMENTATION_FIELDS,
+    }
+
+
+def retrieval_policy_meta(policy_id: str) -> dict[str, Any]:
+    if policy_id not in C1_RETRIEVAL_POLICIES:
+        raise RuntimeError(f"unknown retrieval policy: {policy_id}")
+    policy = dict(C1_RETRIEVAL_POLICIES[policy_id])
+    return {
+        "policy_id": str(policy["policy_id"]),
+        "query_policy": str(policy["query_policy"]),
+        "top_k_policy": str(policy["top_k_policy"]),
+        "top_k_override": policy["top_k_override"],
+        "min_similarity_policy": "eval_payload",
+        "lexical_rerank_policy": "eval_payload",
+        "augmented_fields": list(RETRIEVAL_QUERY_AUGMENTATION_FIELDS),
+    }
+
+
+def effective_retrieval_options(options: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "top_k": int(options.get("top_k", 5)),
+        "min_similarity": float(options.get("min_similarity", 0.45)),
+        "lexical_rerank": bool(options.get("lexical_rerank", False)),
+    }
+
+
+def apply_retrieval_policy_to_payload(payload: dict[str, Any], policy_id: str) -> dict[str, Any]:
+    policy = retrieval_policy_meta(policy_id)
+    options = dict(payload.get("options") or {})
+    original_options = effective_retrieval_options(options)
+    if policy["top_k_override"] is not None:
+        options["top_k"] = int(policy["top_k_override"])
+    payload["options"] = options
+    return {
+        "retrieval_policy_id": policy["policy_id"],
+        "retrieval_query_policy": policy["query_policy"],
+        "retrieval_top_k_policy": policy["top_k_policy"],
+        "retrieval_min_similarity_policy": policy["min_similarity_policy"],
+        "retrieval_lexical_rerank_policy": policy["lexical_rerank_policy"],
+        "retrieval_augmented_fields": policy["augmented_fields"],
+        "retrieval_options_original": original_options,
+        "retrieval_options_effective": effective_retrieval_options(options),
     }
 
 
@@ -894,6 +952,50 @@ def citation_reachability_meta(
     }
 
 
+def source_rank_map(source_ids: list[str]) -> dict[str, int]:
+    ranks: dict[str, int] = {}
+    for index, source_id in enumerate(source_ids, start=1):
+        if source_id and source_id not in ranks:
+            ranks[source_id] = index
+    return ranks
+
+
+def expected_hit_at_k(expected_source_ids: list[str], ranks: dict[str, int], k: int) -> dict[str, Any]:
+    hits = [source_id for source_id in expected_source_ids if ranks.get(source_id, k + 1) <= k]
+    return {
+        "any": bool(hits),
+        "all": bool(expected_source_ids) and len(hits) == len(expected_source_ids),
+        "source_ids": hits,
+    }
+
+
+def retrieval_policy_diagnostics(
+    case_id: str,
+    *,
+    expected_source_ids: list[str],
+    retrieved_source_ids: list[str],
+    returned_source_ids: list[str],
+) -> dict[str, Any]:
+    expected = clean_source_ids(expected_source_ids)
+    retrieved = clean_source_ids(retrieved_source_ids)
+    returned = set(clean_source_ids(returned_source_ids))
+    ranks = source_rank_map(retrieved)
+    expected_retrieved = [source_id for source_id in expected if source_id in ranks]
+    expected_not_retrieved = [source_id for source_id in expected if source_id not in ranks]
+    retrieved_but_not_cited = [source_id for source_id in expected_retrieved if source_id not in returned]
+    diagnostics = {
+        "expected_source_rank": {source_id: ranks.get(source_id) for source_id in expected},
+        "retrieved_expected_hit_at_5": expected_hit_at_k(expected, ranks, 5),
+        "retrieved_expected_hit_at_10": expected_hit_at_k(expected, ranks, 10),
+        "expected_source_not_retrieved": expected_not_retrieved,
+        "retrieved_expected_but_not_cited": retrieved_but_not_cited,
+        "ra03_source_index_hygiene_unresolved": False,
+    }
+    if case_id == "RA-03-safety-boundary" and "rule:drug:sme" not in ranks:
+        diagnostics["ra03_source_index_hygiene_unresolved"] = True
+    return diagnostics
+
+
 def source_id_near_misses(raw_source_ids: list[str], retrieved_source_ids: list[str]) -> list[dict[str, str]]:
     retrieved = set(retrieved_source_ids)
     near_misses: list[dict[str, str]] = []
@@ -1227,6 +1329,7 @@ def run_harness_for_model(
     *,
     store_replay_responses: bool = False,
     manual_lane_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
+    retrieval_policy_id: str = C1_RETRIEVAL_POLICY_DEFAULT,
 ) -> list[dict[str, Any]]:
     os.environ.update(
         {
@@ -1291,6 +1394,7 @@ def run_harness_for_model(
         for case in cases:
             case_id = str(case.get("id", ""))
             payload = case_payload(case, default_options)
+            retrieval_policy = apply_retrieval_policy_to_payload(payload, retrieval_policy_id)
             before = len(traces)
             started = time.perf_counter()
             response = client.post("/explain", json=payload)
@@ -1361,6 +1465,12 @@ def run_harness_for_model(
                 retrieved_source_ids=retrieved_source_ids,
                 returned_source_ids=returned_source_ids,
             )
+            retrieval_diagnostics = retrieval_policy_diagnostics(
+                case_id,
+                expected_source_ids=expected,
+                retrieved_source_ids=retrieved_source_ids,
+                returned_source_ids=returned_source_ids,
+            )
             manual_lanes = (
                 {
                     "semantic": "pending",
@@ -1421,6 +1531,12 @@ def run_harness_for_model(
                 "manual_review_needed": store_replay_responses and llm_called,
                 "manual_lanes": manual_lanes,
                 "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
+                **retrieval_policy,
+                "expected_source_rank": retrieval_diagnostics["expected_source_rank"],
+                "retrieved_expected_hit_at_5": retrieval_diagnostics["retrieved_expected_hit_at_5"],
+                "retrieved_expected_hit_at_10": retrieval_diagnostics["retrieved_expected_hit_at_10"],
+                "retrieved_expected_but_not_cited": retrieval_diagnostics["retrieved_expected_but_not_cited"],
+                "ra03_source_index_hygiene_unresolved": retrieval_diagnostics["ra03_source_index_hygiene_unresolved"],
             }
             row.update(content_lane_meta(case, trace, llm_called=llm_called))
             apply_manual_lane_override(row, model_label, manual_lane_overrides or {})
@@ -1462,6 +1578,14 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
         if retrieval_aug.get("enabled"):
             handle.write(
                 f"- retrieval_query_augmentation: enabled; fields={','.join(retrieval_aug.get('fields') or [])}\n"
+            )
+        retrieval_policy = payload.get("retrieval_policy") or {}
+        if retrieval_policy:
+            handle.write(
+                f"- retrieval_policy: id={retrieval_policy.get('policy_id')} "
+                f"query={retrieval_policy.get('query_policy')} "
+                f"top_k_policy={retrieval_policy.get('top_k_policy')} "
+                f"top_k_override={retrieval_policy.get('top_k_override')}\n"
             )
         manual_overlay = payload.get("manual_lane_overlay") or {}
         if is_c1_replay:
@@ -1529,8 +1653,14 @@ def write_outputs(payload: dict[str, Any]) -> tuple[Path, Path]:
                     f"retrieved={case['retrieved_count']} citations={case['citation_count']} "
                     f"content={case['content_lane_status']} "
                     f"keyword_hits={case['content_keywords_hit_count']}/{case['content_keywords_expected_count']} "
+                    f"retrieval_policy={case.get('retrieval_policy_id', '-')} "
+                    f"effective_top_k={case.get('retrieval_options_effective', {}).get('top_k', '-')} "
+                    f"hit5={len((case.get('retrieved_expected_hit_at_5') or {}).get('source_ids') or [])} "
+                    f"hit10={len((case.get('retrieved_expected_hit_at_10') or {}).get('source_ids') or [])} "
                     f"reach_gap={len(case.get('expected_source_not_retrieved') or [])} "
                     f"cite_gap={len(case.get('expected_retrieved_not_cited') or [])} "
+                    f"retrieved_not_cited={len(case.get('retrieved_expected_but_not_cited') or [])} "
+                    f"ra03_hygiene={case.get('ra03_source_index_hygiene_unresolved', False)} "
                     f"policy_reach={case.get('citation_policy_reachability_pass')} "
                     f"policy_select={case.get('citation_policy_selection_pass')} "
                     f"policy_pass={case.get('citation_policy', {}).get('policy_pass')} "
@@ -1559,6 +1689,12 @@ def main() -> int:
     parser.add_argument("--allow-approved-runner-worktree", action="store_true")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--manual-lanes-file", default="")
+    parser.add_argument(
+        "--retrieval-policy",
+        default=C1_RETRIEVAL_POLICY_DEFAULT,
+        choices=sorted(C1_RETRIEVAL_POLICIES),
+        help="C1 endpoint replay retrieval policy. Default keeps eval payload top_k=5.",
+    )
     args = parser.parse_args()
     if not (
         args.confirm_phase2_heavy_run
@@ -1592,6 +1728,8 @@ def main() -> int:
 
     if args.manual_lanes_file and not args.confirm_h2_c1_endpoint_replay:
         raise RuntimeError("--manual-lanes-file is only allowed with --confirm-h2-c1-endpoint-replay")
+    if args.retrieval_policy != C1_RETRIEVAL_POLICY_DEFAULT and not args.confirm_h2_c1_endpoint_replay:
+        raise RuntimeError("--retrieval-policy override is only allowed with --confirm-h2-c1-endpoint-replay")
     manual_lane_overrides = load_manual_lane_overrides(Path(args.manual_lanes_file)) if args.manual_lanes_file else {}
 
     config = load_json(CONFIG_PATH)
@@ -1645,6 +1783,7 @@ def main() -> int:
             else "expected_summary_rubric when present; legacy expected_summary_keywords retained as supporting metadata"
         ),
         "retrieval_query_augmentation": retrieval_query_augmentation_meta(),
+        "retrieval_policy": retrieval_policy_meta(args.retrieval_policy),
         "raw_model_responses_stored": bool(args.confirm_h2_c1_endpoint_replay),
         "manual_lane_overlay": {
             "enabled": bool(manual_lane_overrides),
@@ -1687,6 +1826,7 @@ def main() -> int:
                 eval_set,
                 store_replay_responses=args.confirm_h2_c1_endpoint_replay,
                 manual_lane_overrides=manual_lane_overrides,
+                retrieval_policy_id=args.retrieval_policy,
             )
             print(f"DONE {label}", flush=True)
         except Exception as exc:

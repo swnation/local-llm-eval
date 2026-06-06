@@ -454,11 +454,21 @@
         }
       },
       "expected_citations_includes_at_least": [
-        "rule:drug:sme",
         "kb:소아_AGE_sme_2세미만",
         "kb:소아_AGE_FGID:007"
       ],
+      "acceptable_citation_set": {
+        "required_all": [
+          "kb:소아_AGE_sme_2세미만",
+          "kb:소아_AGE_FGID:007"
+        ],
+        "optional_hits": [
+          "rule:drug:sme"
+        ],
+        "invalid_aliases": []
+      },
       "expected_citations_pending": false,
+      "_ra03_contract_note": "rule:drug:sme exists but currently does not encode the under-two sme safety boundary; keep it optional until EMR source enrichment/reindex is explicitly approved.",
       "expected_summary_keywords": ["sme", "만 2세 미만", "trimesy", "lacto2", "hidra", "나이 확인", "제한"],
       "expected_summary_rubric": {
         "concept_required": [

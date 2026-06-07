@@ -211,7 +211,7 @@ def file_verification(model: dict[str, Any]) -> dict[str, Any]:
 def runtime_snapshot() -> dict[str, Any]:
     script = r"""
 $ports = @(Get-NetTCPConnection -LocalPort 18080,18081 -State Listen -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess)
-$shim = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*hpz2_ollama_compat_llamacpp_shim.py*' } | Select-Object ProcessId,CommandLine)
+$shim = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*hpz2_ollama_compat_llamacpp_shim.py*' } | Select-Object ProcessId,CommandLine)
 [pscustomobject]@{
   ports = $ports
   shim_processes = $shim

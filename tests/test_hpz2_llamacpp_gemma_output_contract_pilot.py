@@ -160,6 +160,18 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("stale shim", reason)
 
+    def test_runtime_snapshot_excludes_own_powershell_probe(self):
+        def fake_powershell(script, timeout=60):
+            self.assertIn("$_.ProcessId -ne $PID", script)
+            return {"returncode": 0, "stdout": '{"ports":[],"shim_processes":[]}'}
+
+        with patch.object(runner, "powershell", side_effect=fake_powershell):
+            snapshot = runner.runtime_snapshot()
+
+        self.assertTrue(snapshot["ok"])
+        self.assertEqual(snapshot["ports"], [])
+        self.assertEqual(snapshot["shim_processes"], [])
+
     def test_dry_run_does_not_start_subprocess(self):
         with patch.object(runner.subprocess, "Popen") as popen:
             rc = runner.dry_run(CONFIG, runner.QAT_MODELS[:1], runner.CONTRACTS)

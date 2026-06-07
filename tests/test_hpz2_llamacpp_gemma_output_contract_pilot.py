@@ -44,10 +44,12 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
             fallback_args=False,
             confirm_hpz2=True,
             confirm_gemma_llamacpp_output_contract_pilot=True,
+            confirm_gemma_llamacpp_endpoint_readiness_bridge=False,
+            bridge_c1_shape=False,
         )
 
     def read_payload(self, tmp: str) -> dict:
-        result_dirs = sorted(Path(tmp).glob("gemma_llamacpp_output_contract_pilot_*"))
+        result_dirs = sorted(path for path in Path(tmp).glob("gemma_llamacpp_*") if path.is_dir())
         self.assertEqual(len(result_dirs), 1)
         return json.loads((result_dirs[0] / "gemma_llamacpp_output_contract_results.json").read_text(encoding="utf-8"))
 
@@ -62,7 +64,7 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
     def test_static_validation_rejects_mmproj_or_non_qat_path(self):
         model = copy.deepcopy(runner.QAT_MODELS[0])
         model["model_path"] = r"C:\models\gemma-mmproj.gguf"
-        errors = runner.validate_static(CONFIG, [model], runner.CONTRACTS)
+        errors = runner.validate_static(CONFIG, [model], runner.select_contracts(None))
         self.assertTrue(any("QAT Q4_0 text GGUF" in error for error in errors))
         self.assertTrue(any("mmproj" in error for error in errors))
 
@@ -97,6 +99,85 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
                 "reasoning_chars": 0,
             }
         )
+        self.assertEqual(score["failure_owner"], "native_contract")
+        self.assertFalse(score["citations_exact"])
+
+    def test_bridge_contract_selection_uses_gb_contracts(self):
+        contracts = runner.select_contracts(None, bridge_c1_shape=True)
+        self.assertEqual([contract["id"] for contract in contracts], ["GB1", "GB2"])
+        self.assertEqual(runner.run_mode(contracts), "gemma_llamacpp_endpoint_readiness_bridge")
+        self.assertEqual(runner.validate_static(CONFIG, runner.QAT_MODELS[:1], contracts), [])
+
+    def test_static_validation_rejects_mixed_pilot_and_bridge_contracts(self):
+        contracts = runner.select_contracts(["G1", "GB1"])
+        errors = runner.validate_static(CONFIG, runner.QAT_MODELS[:1], contracts)
+        self.assertTrue(any("must not be mixed" in error for error in errors))
+
+    def test_bridge_flag_rejects_non_bridge_explicit_contracts(self):
+        with self.assertRaises(ValueError):
+            runner.select_contracts(["G1", "G2"], bridge_c1_shape=True)
+
+    def test_bridge_prompt_uses_bridge_source_and_not_real_ra_cases(self):
+        contract = runner.select_contracts(["GB2"])[0]
+        system, user = runner.build_prompt(contract)
+        joined = system + "\n" + user
+        self.assertIn(runner.BRIDGE_SOURCE_ID, joined)
+        self.assertIn(runner.BRIDGE_CITATION, joined)
+        self.assertNotIn(runner.DEMO_SOURCE_ID, joined)
+        self.assertNotIn("RA-03", joined)
+        self.assertNotIn("RA-06", joined)
+        self.assertNotIn("RA-07", joined)
+        self.assertNotIn("/explain", joined)
+
+    def test_gb2_requires_exact_bracketed_bridge_citation(self):
+        contract = runner.select_contracts(["GB2"])[0]
+        clean = {"summary": "ok", "citations": [runner.BRIDGE_CITATION]}
+        score = runner.score_response(
+            contract,
+            {
+                "status": "ok",
+                "text": json.dumps(clean),
+                "reasoning_text": "",
+                "output_channel_status": "content",
+                "content_chars": 1,
+                "reasoning_chars": 0,
+            },
+        )
+        self.assertEqual(score["pass_status"], "PASS")
+        self.assertTrue(score["endpoint_eligible"])
+
+        wrong = {"summary": "ok", "citations": [runner.DEMO_CITATION]}
+        score = runner.score_response(
+            contract,
+            {
+                "status": "ok",
+                "text": json.dumps(wrong),
+                "reasoning_text": "",
+                "output_channel_status": "content",
+                "content_chars": 1,
+                "reasoning_chars": 0,
+            },
+        )
+        self.assertEqual(score["failure_owner"], "native_contract")
+        self.assertFalse(score["citations_exact"])
+
+    def test_gb1_requires_exact_bridge_citation(self):
+        contract = runner.select_contracts(["GB1"])[0]
+        response = {
+            "status": "ok",
+            "text": f"Bridge explanation {runner.BRIDGE_CITATION}",
+            "reasoning_text": "",
+            "output_channel_status": "content",
+            "content_chars": 32,
+            "reasoning_chars": 0,
+        }
+        score = runner.score_response(contract, response)
+        self.assertEqual(score["pass_status"], "PASS")
+        self.assertTrue(score["citations_exact"])
+
+        missing = dict(response)
+        missing["text"] = "Bridge explanation without citation"
+        score = runner.score_response(contract, missing)
         self.assertEqual(score["failure_owner"], "native_contract")
         self.assertFalse(score["citations_exact"])
 
@@ -174,7 +255,7 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
 
     def test_dry_run_does_not_start_subprocess(self):
         with patch.object(runner.subprocess, "Popen") as popen:
-            rc = runner.dry_run(CONFIG, runner.QAT_MODELS[:1], runner.CONTRACTS)
+            rc = runner.dry_run(CONFIG, runner.QAT_MODELS[:1], runner.select_contracts(None))
         self.assertEqual(rc, 0)
         popen.assert_not_called()
 
@@ -187,7 +268,15 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
             confirm_gemma_llamacpp_output_contract_pilot=False,
         )
         with patch.object(runner.subprocess, "Popen") as popen:
-            rc = runner.run_real(args, CONFIG, runner.QAT_MODELS[:1], runner.CONTRACTS)
+            rc = runner.run_real(args, CONFIG, runner.QAT_MODELS[:1], runner.select_contracts(None))
+        self.assertEqual(rc, 2)
+        popen.assert_not_called()
+
+    def test_run_real_bridge_refuses_without_bridge_confirm_before_subprocess(self):
+        args = self.run_real_args(tmp="")
+        args.confirm_gemma_llamacpp_endpoint_readiness_bridge = False
+        with patch.object(runner.subprocess, "Popen") as popen:
+            rc = runner.run_real(args, CONFIG, runner.QAT_MODELS[:1], runner.select_contracts(["GB1"]))
         self.assertEqual(rc, 2)
         popen.assert_not_called()
 
@@ -223,6 +312,46 @@ class GemmaLlamaCppOutputContractPilotTests(unittest.TestCase):
         self.assertTrue(cell["endpoint_eligible"])
         serialized = json.dumps(payload, ensure_ascii=False)
         self.assertNotIn('"summary": "ok"', serialized)
+
+    def test_run_real_writes_bridge_mode_metadata_only_for_clean_gb2(self):
+        response = {
+            "status": "ok",
+            "text": json.dumps({"summary": "bridge ok", "citations": [runner.BRIDGE_CITATION]}),
+            "reasoning_text": "",
+            "output_channel_status": "content",
+            "extraction_channel": "content",
+            "content_chars": 77,
+            "reasoning_chars": 0,
+            "message_keys": ["content"],
+            "finish_reason": "stop",
+            "usage": {"completion_tokens": 12},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            args = self.run_real_args(tmp)
+            args.confirm_gemma_llamacpp_output_contract_pilot = False
+            args.confirm_gemma_llamacpp_endpoint_readiness_bridge = True
+            with patch.object(runner, "now_stamp", return_value="20260607_000002"), \
+                patch.object(runner, "gemma_preflight", return_value={"ok": True}), \
+                patch.object(runner, "gemma_preflight_pass", return_value=(True, "")), \
+                patch.object(runner, "memory_snapshot", return_value={"ok": True}), \
+                patch.object(runner, "wait_for_server", return_value={"ok": True}), \
+                patch.object(runner, "call_chat_completion", return_value=response), \
+                patch.object(runner.subprocess, "Popen", return_value=FakeProc()), \
+                patch.object(runner.time, "sleep"):
+                rc = runner.run_real(args, CONFIG, runner.QAT_MODELS[:1], runner.select_contracts(["GB2"]))
+            payload = self.read_payload(tmp)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["mode"], "gemma_llamacpp_endpoint_readiness_bridge")
+        self.assertTrue(payload["bridge_c1_shape"])
+        self.assertFalse(payload["endpoint_readiness_assessed"])
+        self.assertFalse(payload["raw_model_output_stored"])
+        cell = payload["models"][0]["cells"][0]
+        self.assertEqual(cell["contract_id"], "GB2")
+        self.assertEqual(cell["pass_status"], "PASS")
+        self.assertTrue(cell["endpoint_eligible"])
+        serialized = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn('"summary": "bridge ok"', serialized)
 
     def test_final_preflight_failure_stops_after_run(self):
         response = {

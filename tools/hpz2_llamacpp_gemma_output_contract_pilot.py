@@ -45,6 +45,10 @@ DEMO_CITATION = f"[{DEMO_SOURCE_ID}]"
 DEFAULT_MODELS = ["hpz2-gemma4-26b-a4b-qat-q4_0"]
 REFERENCE_MODELS = ["hpz2-gemma4-31b-qat-q4_0"]
 DEFAULT_CONTRACTS = ["G1", "G2"]
+BRIDGE_SOURCE_ID = "kb:DEMO_GEMMA_BRIDGE:001"
+BRIDGE_CITATION = f"[{BRIDGE_SOURCE_ID}]"
+BRIDGE_CONTRACTS = ["GB1", "GB2"]
+CONTRACT_ORDER = DEFAULT_CONTRACTS + BRIDGE_CONTRACTS
 
 QAT_MODELS: list[dict[str, Any]] = [
     {
@@ -77,12 +81,34 @@ CONTRACTS: list[dict[str, Any]] = [
         "label": "final-answer-control",
         "response_format": "none",
         "max_tokens": 512,
+        "source_id": DEMO_SOURCE_ID,
+        "citation": DEMO_CITATION,
     },
     {
         "id": "G2",
         "label": "json-schema-native-contract",
         "response_format": "json_schema",
         "max_tokens": 512,
+        "source_id": DEMO_SOURCE_ID,
+        "citation": DEMO_CITATION,
+    },
+    {
+        "id": "GB1",
+        "label": "final-answer-c1-shape",
+        "response_format": "none",
+        "max_tokens": 512,
+        "source_id": BRIDGE_SOURCE_ID,
+        "citation": BRIDGE_CITATION,
+        "bridge_c1_shape": True,
+    },
+    {
+        "id": "GB2",
+        "label": "json-schema-c1-shape",
+        "response_format": "json_schema",
+        "max_tokens": 512,
+        "source_id": BRIDGE_SOURCE_ID,
+        "citation": BRIDGE_CITATION,
+        "bridge_c1_shape": True,
     },
 ]
 
@@ -107,36 +133,79 @@ def powershell(script: str, timeout: int = 60) -> dict[str, Any]:
     return run_cmd(["powershell", "-NoProfile", "-Command", script], timeout=timeout)
 
 
-def now_result_dir(root_value: str | None, timestamp: str) -> Path:
-    return output_root(root_value) / f"gemma_llamacpp_output_contract_pilot_{timestamp}"
+def run_mode(contracts: list[dict[str, Any]]) -> str:
+    if any(contract.get("bridge_c1_shape") for contract in contracts):
+        return "gemma_llamacpp_endpoint_readiness_bridge"
+    return "gemma_llamacpp_output_contract_pilot"
+
+
+def now_result_dir(root_value: str | None, timestamp: str, mode: str) -> Path:
+    return output_root(root_value) / f"{mode}_{timestamp}"
 
 
 def build_prompt(contract: dict[str, Any]) -> tuple[str, str]:
-    system = (
-        "You are testing output-contract compliance for a synthetic non-PHI "
-        "local-model evidence pack. Use only the provided evidence. Do not "
-        "invent source IDs. Do not include patient identifiers."
-    )
-    if contract["id"] == "G1":
-        task = "Return one concise final answer sentence with the exact citation."
-    else:
-        task = (
-            "Return only a JSON object with exactly these keys: summary, citations. "
-            "citations must be an array containing the exact bracketed source ID."
+    source_id = str(contract.get("source_id", DEMO_SOURCE_ID))
+    citation = str(contract.get("citation", f"[{source_id}]"))
+    if contract.get("bridge_c1_shape"):
+        system = (
+            "You are testing a synthetic C1-shaped explanation prompt for a "
+            "local model. Use only the provided evidence. Do not infer beyond "
+            "the evidence. Do not invent source IDs. Do not include patient "
+            "identifiers or clinical instructions."
         )
-    user = f"""Case: GEMMA-OUTPUT-CONTRACT-DEMO
+        if contract["id"] == "GB1":
+            task = (
+                "Return one short explanation-style final answer with the exact "
+                "citation. Keep it grounded only in the evidence."
+            )
+        else:
+            task = (
+                "Return only a JSON object with exactly these keys: summary, citations. "
+                "summary must be a short explanation-style string. citations must be "
+                "an array containing the exact bracketed source ID."
+            )
+        user = f"""Case: GEMMA-BRIDGE-C1-SHAPE-DEMO
+
+Task:
+{task}
+
+Synthetic evidence pack:
+[{source_id}] The bridge evidence says this local model is being tested for a short evidence-grounded explanation shape before any real endpoint replay.
+
+Valid source IDs:
+["{source_id}"]
+
+Required citation:
+{citation}
+
+Do not output any patient name, chart number, resident registration number, phone number, or clinical instruction.
+"""
+    else:
+        system = (
+            "You are testing output-contract compliance for a synthetic non-PHI "
+            "local-model evidence pack. Use only the provided evidence. Do not "
+            "invent source IDs. Do not include patient identifiers."
+        )
+        if contract["id"] == "G1":
+            task = "Return one concise final answer sentence with the exact citation."
+        else:
+            task = (
+                "Return only a JSON object with exactly these keys: summary, citations. "
+                "citations must be an array containing the exact bracketed source ID."
+            )
+        user = f"""Case: GEMMA-OUTPUT-CONTRACT-DEMO
 
 Task:
 {task}
 
 Evidence pack:
-[{DEMO_SOURCE_ID}] This synthetic evidence says the output must explain only that the local model is being tested for final-answer and JSON-contract behavior.
+[{source_id}] This synthetic evidence says the output must explain only that the local model is being tested for final-answer and JSON-contract behavior.
 
 Valid source IDs:
-["{DEMO_SOURCE_ID}"]
+["{source_id}"]
 
 Required citation:
-{DEMO_CITATION}
+{citation}
 
 Do not output any patient name, chart number, resident registration number, phone number, or clinical instruction.
 """
@@ -152,13 +221,16 @@ def select_models(labels: list[str] | None, include_reference: bool) -> list[dic
     return [by_label[label] for label in wanted]
 
 
-def select_contracts(wanted: list[str] | None) -> list[dict[str, Any]]:
-    labels = wanted or DEFAULT_CONTRACTS
+def select_contracts(wanted: list[str] | None, bridge_c1_shape: bool = False) -> list[dict[str, Any]]:
+    labels = wanted or (BRIDGE_CONTRACTS if bridge_c1_shape else DEFAULT_CONTRACTS)
     by_id = {contract["id"]: contract for contract in CONTRACTS}
     missing = [label for label in labels if label not in by_id]
     if missing:
         raise ValueError("unknown contract ID(s): " + ", ".join(missing))
-    return [by_id[label] for label in labels]
+    selected = [by_id[label] for label in labels]
+    if bridge_c1_shape and wanted and any(not contract.get("bridge_c1_shape") for contract in selected):
+        raise ValueError("--bridge-c1-shape accepts only GB1/GB2 bridge contracts")
+    return selected
 
 
 def validate_static(config: dict[str, Any], models: list[dict[str, Any]], contracts: list[dict[str, Any]]) -> list[str]:
@@ -178,8 +250,12 @@ def validate_static(config: dict[str, Any], models: list[dict[str, Any]], contra
             errors.append(f"model is not the QAT Q4_0 text GGUF: {model.get('label')}")
         if "mmproj" in model_path.lower():
             errors.append(f"mmproj is not allowed in text-only pilot: {model.get('label')}")
-    if [contract["id"] for contract in contracts] != sorted([contract["id"] for contract in contracts], key=DEFAULT_CONTRACTS.index):
-        errors.append("contracts must stay in G1 then G2 order when both are selected")
+    contract_ids = [contract["id"] for contract in contracts]
+    bridge_flags = [bool(contract.get("bridge_c1_shape")) for contract in contracts]
+    if any(bridge_flags) and not all(bridge_flags):
+        errors.append("bridge C1-shaped contracts must not be mixed with output-contract pilot contracts")
+    if contract_ids != sorted(contract_ids, key=CONTRACT_ORDER.index):
+        errors.append("contracts must stay in registered contract order")
     return errors
 
 
@@ -324,8 +400,9 @@ def base_score(contract: dict[str, Any], response: dict[str, Any]) -> dict[str, 
     return score
 
 
-def score_g1(response: dict[str, Any]) -> dict[str, Any]:
-    score = base_score(CONTRACTS[0], response)
+def score_g1(response: dict[str, Any], contract: dict[str, Any] | None = None) -> dict[str, Any]:
+    selected = contract or CONTRACTS[0]
+    score = base_score(selected, response)
     if score["failure_owner"]:
         return score
     content_chars = int(response.get("content_chars", 0) or 0)
@@ -333,6 +410,14 @@ def score_g1(response: dict[str, Any]) -> dict[str, Any]:
     if content_chars <= 0:
         score["failure_owner"] = "empty_final_content"
         return score
+    if selected.get("bridge_c1_shape"):
+        expected_citation = str(selected.get("citation", BRIDGE_CITATION))
+        expected_source_id = str(selected.get("source_id", BRIDGE_SOURCE_ID))
+        score["citation_values"] = [expected_citation] if expected_citation in str(response.get("text", "")) else []
+        score["citations_exact"] = score["citation_values"] == [expected_citation] and normalize_source_id(expected_citation)[0] == expected_source_id
+        if not score["citations_exact"]:
+            score["failure_owner"] = "native_contract"
+            return score
     if reasoning_chars > 0:
         score["pass_status"] = "WARN"
         score["failure_owner"] = "reasoning_control_warn"
@@ -344,8 +429,11 @@ def score_g1(response: dict[str, Any]) -> dict[str, Any]:
     return score
 
 
-def score_g2(response: dict[str, Any]) -> dict[str, Any]:
-    score = base_score(CONTRACTS[1], response)
+def score_g2(response: dict[str, Any], contract: dict[str, Any] | None = None) -> dict[str, Any]:
+    selected = contract or CONTRACTS[1]
+    expected_citation = str(selected.get("citation", DEMO_CITATION))
+    expected_source_id = str(selected.get("source_id", DEMO_SOURCE_ID))
+    score = base_score(selected, response)
     if score["failure_owner"]:
         return score
     parsed, parse_status = strict_json_object(str(response.get("text", "")))
@@ -361,7 +449,7 @@ def score_g2(response: dict[str, Any]) -> dict[str, Any]:
     if isinstance(citations, list):
         score["citation_values"] = [str(item) for item in citations]
     normalized = [normalize_source_id(item)[0] for item in score["citation_values"]]
-    score["citations_exact"] = score["citation_values"] == [DEMO_CITATION] and normalized == [DEMO_SOURCE_ID]
+    score["citations_exact"] = score["citation_values"] == [expected_citation] and normalized == [expected_source_id]
     if keys != ["citations", "summary"] or not score["summary_nonempty"] or not score["citations_exact"]:
         score["failure_owner"] = "native_contract"
         return score
@@ -375,10 +463,10 @@ def score_g2(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def score_response(contract: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
-    if contract["id"] == "G1":
-        return score_g1(response)
-    if contract["id"] == "G2":
-        return score_g2(response)
+    if contract["id"] in {"G1", "GB1"}:
+        return score_g1(response, contract)
+    if contract["id"] in {"G2", "GB2"}:
+        return score_g2(response, contract)
     raise ValueError("unsupported contract: " + str(contract.get("id")))
 
 
@@ -393,12 +481,17 @@ def inference_options(model: dict[str, Any], contract: dict[str, Any]) -> dict[s
 
 def write_summary(out_dir: Path, payload: dict[str, Any]) -> Path:
     path = out_dir / "gemma_llamacpp_output_contract_summary.md"
+    bridge_c1_shape = bool(payload.get("bridge_c1_shape", False))
+    title = "Gemma llama.cpp Endpoint-Readiness Bridge" if bridge_c1_shape else "Gemma llama.cpp Output-Contract Pilot"
     with path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("# Gemma llama.cpp Output-Contract Pilot\n\n")
+        handle.write(f"# {title}\n\n")
         handle.write(f"- generated_at: `{payload['generated_at']}`\n")
+        handle.write(f"- mode: `{payload.get('mode')}`\n")
         handle.write(f"- stopped_early: `{payload.get('stopped_early')}`\n")
         handle.write(f"- stop_reason: `{payload.get('stop_reason', '')}`\n")
         handle.write("- backend: direct llama.cpp `/v1/chat/completions`\n")
+        if bridge_c1_shape:
+            handle.write("- bridge: synthetic C1-shaped metadata-only lane\n")
         handle.write("- endpoint readiness: not assessed; no `/explain` call\n")
         handle.write("- raw model output stored: false\n\n")
         handle.write("| model | contract | api | channel | content chars | reasoning chars | parse | pass | endpoint eligible | failure |\n")
@@ -429,7 +522,9 @@ def dry_run(config: dict[str, Any], models: list[dict[str, Any]], contracts: lis
         for error in errors:
             print(f"- {error}")
         return 2
-    print("HP Z2 Gemma llama.cpp output-contract pilot dry-run")
+    mode = run_mode(contracts)
+    print("HP Z2 Gemma llama.cpp dry-run")
+    print(f"mode: {mode}")
     print("backend: direct llama.cpp /v1/chat/completions")
     print(f"models: {len(models)}")
     for model in models:
@@ -448,18 +543,26 @@ def run_real(args: argparse.Namespace, config: dict[str, Any], models: list[dict
         for error in errors:
             print(error)
         return 2
-    if not (args.confirm_hpz2 and args.confirm_gemma_llamacpp_output_contract_pilot):
+    mode = run_mode(contracts)
+    bridge_c1_shape = mode == "gemma_llamacpp_endpoint_readiness_bridge"
+    if bridge_c1_shape:
+        confirmed = args.confirm_hpz2 and getattr(args, "confirm_gemma_llamacpp_endpoint_readiness_bridge", False)
+        if not confirmed:
+            print("Refusing execution without --confirm-hpz2 and --confirm-gemma-llamacpp-endpoint-readiness-bridge.", flush=True)
+            return 2
+    elif not (args.confirm_hpz2 and args.confirm_gemma_llamacpp_output_contract_pilot):
         print("Refusing execution without --confirm-hpz2 and --confirm-gemma-llamacpp-output-contract-pilot.", flush=True)
         return 2
 
     timestamp = now_stamp()
-    out_dir = now_result_dir(args.output_root, timestamp)
+    out_dir = now_result_dir(args.output_root, timestamp, mode)
     out_dir.mkdir(parents=True, exist_ok=True)
     preflight = gemma_preflight(config, models)
     ok, reason = gemma_preflight_pass(config, preflight)
     payload: dict[str, Any] = {
         "generated_at": iso_now(),
-        "mode": "gemma_llamacpp_output_contract_pilot",
+        "mode": mode,
+        "bridge_c1_shape": bridge_c1_shape,
         "backend": "llama.cpp",
         "config": args.config,
         "raw_model_output_stored": False,
@@ -568,6 +671,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fallback-args", action="store_true")
     parser.add_argument("--confirm-hpz2", action="store_true")
     parser.add_argument("--confirm-gemma-llamacpp-output-contract-pilot", action="store_true")
+    parser.add_argument("--confirm-gemma-llamacpp-endpoint-readiness-bridge", action="store_true")
+    parser.add_argument("--bridge-c1-shape", action="store_true")
     return parser.parse_args()
 
 
@@ -575,7 +680,7 @@ def main() -> int:
     args = parse_args()
     config = load_json(args.config)
     models = select_models(args.models, args.include_31b_reference)
-    contracts = select_contracts(args.contracts)
+    contracts = select_contracts(args.contracts, args.bridge_c1_shape)
     if args.dry_run:
         return dry_run(config, models, contracts)
     return run_real(args, config, models, contracts)

@@ -1,11 +1,11 @@
 # Project Context — Local LLM Eval
 
 > **새 세션 진입 시 가장 먼저 읽는 파일.** README/리포트 전체 다시 읽지 말고 여기서 시작.
-> 마지막 갱신: 2026-05-18 (Round 9 MoE+dense 비교 완료 — small dense가 non-RAG eval에서 baseline 동급, RAG architecture promotion 근거)
+> 마지막 갱신: 2026-06-20 (DGX Spark pair + vLLM default alignment added; older HP/Ollama/LM Studio/llama.cpp sections are historical unless a later gate reopens them)
 >
 > 64GB RAM 업그레이드 완료. Part 2 진입: (a) 2048-cap FAIL → (a') Qwen maxtok8k 3.77 → (a'') gpt-oss maxtok8k 3.23 (Δ vs 2048: -0.08, Scenario A). **Qwen +0.54 fair-compare lead 확정**. Round 9 추가 결과: **qwen3:14b 3.31/HF0 (gpt-oss baseline 정확히 일치), qwen3:8b 3.38/HF0** — non-RAG v0.3 13 prompts에서 small dense가 gpt-oss dynamic과 동급 이상임이 입증됨. **RAG-augmented small dense architecture를 production primary 후보로 promote할 근거 확보** (단, RAG 효과 자체는 별도 RAG-aware eval set 필요). MoE 후보 (qwen3:30b-a3b, mixtral:8x7b)는 D HF로 탈락.
 
-> **현재 active goal (2026-05-24)**: RAG-aware Phase 2 eval planning. `docs/rag_aware_eval_design_r0.md` = Phase 2.1 design R1 frozen baseline, `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.1 + RA-03 user resolution baseline, `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json` = HP Z2 LM Studio Phase 2 Stage A strict baseline config R0.3, `models_config_hpz2_lmstudio_phase2_stage_ar_v0.1.json` = Stage A-R model-aware config R0.2 (JSON schema + model-specific inference profiles + HP Z2 32768 context load policy), `tools/hpz2_lmstudio_phase2_stage_a_runner.py` = HP Z2 execution-only runner. Stage A-R은 Stage A baseline을 대체하지 않고 Qwen/Gemma/gpt-oss/Granite별 최적화 가능성만 진단한다. Heavy run 은 명시 `Phase 2 heavy run GO` 또는 `Phase 2 Stage A-R heavy run GO` 전까지 금지.
+> **현재 active goal (2026-06-20)**: RAG-aware Phase 2 eval planning, now retargeted to DGX Spark + vLLM for future runtime work. `docs/vllm-default-workflow-alignment-2026-06-20.md` = current serving baseline. `docs/rag_aware_eval_design_r0.md` and `prompts/rag_aware_eval_set_v0.1.json` remain the RAG/eval source of truth. Older HP Z2 / Ollama / LM Studio / llama.cpp sections below are historical evidence unless a later gate explicitly reopens them. Heavy run, PHI, real `/explain`, model control, artifact write, commit/push, relay update, and backup still require separate GO.
 
 ---
 

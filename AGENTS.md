@@ -15,10 +15,23 @@ Treat repo-local files as the source of truth. Memory is supporting context only
 
 The active goal is RAG-aware Phase 2 evaluation planning for `EMR_AI_24clinic` `/explain`.
 
+2026-06-20 DGX/vLLM alignment update:
+
+- New local-model serving baseline for future work is vLLM on the DGX Spark
+  pair, not HP Z2 / LM Studio / Ollama / llama.cpp by default.
+- Default resident endpoints currently verified: `dgxasus:8000`
+  (`qwen3.6-35b-a3b`) and `dgxgiga:8004`
+  (`qwen3.6-35b-a3b-dgxgiga`).
+- Read `docs/vllm-default-workflow-alignment-2026-06-20.md` before reopening
+  runtime, `/explain`, model-comparison, or cross-project local-model gates.
+- This does not authorize PHI, real `/explain`, model control, artifact writes,
+  commit/push, relay update, or backup.
+
 Current planning artifacts:
 
 - `docs/rag_aware_eval_design_r0.md` = Phase 2.1 design R1 frozen baseline, with R2 pre-L2 semantic-first update
 - `prompts/rag_aware_eval_set_v0.1.json` = eval set spec v0.2.1, 17 cases; RA-06/RA-07 added, RA-08 removed
+- `docs/vllm-default-workflow-alignment-2026-06-20.md` = current DGX/vLLM baseline and cross-project local-model alignment
 - `docs/h2-schema-mode-ab-plan-2026-05-30.md` = R13/R14 schema-mode A/B plan/result; H2 schema mode fixed to `json_object` plus strict-schema conformance metric/caveat
 - `docs/h2-model-comparison-plan-2026-05-31.md` = R15 H2 model-comparison plan freeze: Primary 4 x 17-case eval set, `json_object` fixed, 64 model-call cells, execution still gated
 - `models_config_hpz2_lmstudio_phase2_stage_a_v0.1.json` = Phase 2 Stage A LM Studio config R0.2 (includes all HP Z2 LM Studio smoke-pass models + execution pacing)
@@ -33,6 +46,13 @@ Phase 2 heavy run remains blocked until:
 RA-03 is resolved as `sme + trimesy + lacto2`, `dx=a090`, pediatric `age=1`; expected citations are verified in current RAG chunks. Do not change those values without explicit user instruction.
 
 ## Current Runner Baseline
+
+Current default direction:
+
+Future local-model serving work should target the DGX Spark vLLM lane first.
+HP Z2, LM Studio, Ollama, and llama.cpp remain historical evidence, fallback
+paths, or special experiments unless a later relay gate explicitly reopens
+them.
 
 Phase 2 model viability baselines should now be measured on the official HP Z2 runner. Backend lane lock (2026-05-26): llama.cpp is primary for HP Z2 L2/L3 candidate evaluation; LM Studio remains secondary for manual inspection, model management, and historical comparison.
 

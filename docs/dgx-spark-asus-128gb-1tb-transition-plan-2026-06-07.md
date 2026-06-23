@@ -272,7 +272,7 @@ affected projects: local-llm-eval first; any future C:\Github local-LLM runtime 
 evidence: user ordered ASUS DGX Spark OEM 128 GB / 1 TB and stated HP will be returned
 session-only behavior changed: yes, no new HP runs are treated as default
 durable target: C:\Github\memory\MACHINE_ROLES.md and local-llm-eval project README if user approves
-required GO: Main PC machine role change GO or codex-solo common machine-role update GO
+required GO: Main PC machine role change GO or agent-workflow-center common machine-role update GO
 risk if deferred: future agents may keep routing new runtime work to HP Z2 from stale bootstrap text
 ```
 

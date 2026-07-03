@@ -1,5 +1,22 @@
 # local-llm-eval Agent Entry Rules
 
+## Passive Context Index
+
+This file is the always-visible map for `local-llm-eval`. Reopen the exact
+source below before changing plans, model gates, or eval claims.
+
+| Need | Read |
+|---|---|
+| Project context and source truth | `PROJECT_CONTEXT.md` |
+| RAG-aware eval design | `docs/rag_aware_eval_design_r0.md` |
+| Eval prompts/spec | `prompts/rag_aware_eval_set_v0.1.json` |
+| Current DGX/vLLM baseline | `docs/vllm-default-workflow-alignment-2026-06-20.md` |
+| HP Z2 historical runner evidence | the named HP Z2 docs/configs below |
+| Live repo state | `git status --branch --short` |
+
+This index does not authorize PHI, real `/explain`, model control, artifact
+writes, commit/push, relay update, or backup.
+
 ## Session Entry Order
 
 For any new session in `C:\Github\local-llm-eval`, read these first:

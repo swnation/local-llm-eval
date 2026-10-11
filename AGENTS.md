@@ -14,8 +14,9 @@ source below before changing plans, model gates, or eval claims.
 | HP Z2 historical runner evidence | the named HP Z2 docs/configs below |
 | Live repo state | `git status --branch --short` |
 
-This index does not authorize PHI, real `/explain`, model control, artifact
-writes, commit/push, relay update, or backup.
+PHI never leaves the clinic-room PC and no gate opens it (physician
+2026-10-09). This index does not authorize real `/explain`, model control,
+artifact writes, commit/push, relay update, or backup.
 
 ## Session Entry Order
 
@@ -41,8 +42,9 @@ The active goal is RAG-aware Phase 2 evaluation planning for `EMR_AI_24clinic` `
   (`qwen3.6-35b-a3b-dgxgiga`).
 - Read `docs/vllm-default-workflow-alignment-2026-06-20.md` before reopening
   runtime, `/explain`, model-comparison, or cross-project local-model gates.
-- This does not authorize PHI, real `/explain`, model control, artifact writes,
-  commit/push, relay update, or backup.
+- This does not authorize real `/explain`, model control, artifact writes,
+  commit/push, relay update, or backup. PHI never leaves the clinic-room PC
+  (2026-10-09), so no step here reads it.
 
 Current planning artifacts:
 
